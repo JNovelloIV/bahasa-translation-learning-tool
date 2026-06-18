@@ -1,0 +1,30 @@
+name = "sehari-worker"
+main = "src/index.ts"
+compatibility_date = "2024-12-18"
+compatibility_flags = ["nodejs_compat"]
+
+# ---------------------------------------------------------------------------
+# D1 binding. Create the database yourself (see README) and paste the id here:
+#   wrangler d1 create sehari-db
+# Then copy the printed database_id into the value below.
+# ---------------------------------------------------------------------------
+[[d1_databases]]
+binding = "DB"
+database_name = "sehari-db"
+database_id = "REPLACE_WITH_YOUR_D1_DATABASE_ID"
+migrations_dir = "migrations"
+
+# ---------------------------------------------------------------------------
+# Non-secret, env-configurable vars. Model ids are overridable here.
+# The Anthropic API key is NOT here — it is a secret:
+#   wrangler secret put ANTHROPIC_API_KEY
+# ---------------------------------------------------------------------------
+[vars]
+MODEL_TRANSLATE = "claude-haiku-4-5-20251001"
+MODEL_GRADE = "claude-sonnet-4-6"
+ANTHROPIC_VERSION = "2023-06-01"
+# Comma-separated list of origins allowed to call the Worker (your Pages URL).
+# "*" is fine for local dev; lock this down in production.
+ALLOWED_ORIGINS = "*"
+# Fallback identity used only when Cloudflare Access is absent (local dev).
+DEV_USER_ID = "dev@local"
