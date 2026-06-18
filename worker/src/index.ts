@@ -6,6 +6,7 @@ import translate from './routes/translate';
 import review from './routes/review';
 import words from './routes/words';
 import stats from './routes/stats';
+import me from './routes/me';
 
 const app = new Hono<{ Bindings: Env }>();
 
@@ -28,6 +29,7 @@ app.use('*', async (c, next) => {
 
 app.get('/health', (c) => c.json({ ok: true, service: 'sehari-worker' }));
 
+app.route('/me', me);
 app.route('/translate', translate);
 app.route('/review', review);
 app.route('/words', words);

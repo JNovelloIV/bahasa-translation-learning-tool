@@ -90,7 +90,7 @@ async function upsertItem(
     await db
       .prepare(
         `UPDATE items
-           SET surface = ?, gloss_en = COALESCE(NULLIF(?, ''), gloss_en),
+           SET surface = ?, gloss_l1 = COALESCE(NULLIF(?, ''), gloss_l1),
                root = ?, affixes_json = ?,
                use_count = ?, last_used = ?,
                fsrs_json = ?, due = ?, state = ?, graduated = ?
@@ -98,7 +98,7 @@ async function upsertItem(
       )
       .bind(
         item.surface,
-        item.gloss_en,
+        item.gloss_l1,
         item.root,
         affixesJson,
         newUseCount,
@@ -119,7 +119,7 @@ async function upsertItem(
     await db
       .prepare(
         `INSERT INTO items
-           (id, user_id, lemma, surface, type, gloss_en, root, affixes_json,
+           (id, user_id, lemma, surface, type, gloss_l1, root, affixes_json,
             use_count, first_seen, last_used, fsrs_json, due, state, graduated)
          VALUES (?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?, ?, ?, ?, 0)`,
       )
@@ -129,7 +129,7 @@ async function upsertItem(
         item.lemma,
         item.surface,
         item.type,
-        item.gloss_en,
+        item.gloss_l1,
         item.root,
         affixesJson,
         nowIso,

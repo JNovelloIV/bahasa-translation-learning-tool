@@ -1,16 +1,19 @@
-import { nextLabel, weekday, type DeckItem } from '../lib/api';
+import { nextLabel, weekday, type DeckItem, type Profile } from '../lib/api';
 import { speaker } from '../lib/audio';
 import { SpeakerIcon } from '../lib/icons';
 import { StrengthMeter } from '../components/StrengthMeter';
 
 interface Props {
   item: DeckItem;
+  profile: Profile;
   onClose: () => void;
   onReviewNow: () => void;
   toast: (t: string) => void;
 }
 
-export function WordSheet({ item, onClose, onReviewNow }: Props) {
+export function WordSheet({ item, profile, onClose, onReviewNow }: Props) {
+  const T = profile.target_lang;
+  const N = profile.native_lang;
   return (
     <div
       onClick={onClose}
@@ -24,18 +27,18 @@ export function WordSheet({ item, onClose, onReviewNow }: Props) {
 
         <div style={{ display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between', gap: 12 }}>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
-            <span className="id" style={{ fontSize: 34, lineHeight: 1, fontWeight: 500, color: 'var(--ink)' }}>{item.b}</span>
-            <span className="en" style={{ fontSize: 15, color: 'var(--muted)' }}>{item.e} · {item.pos}</span>
+            <span className={T} style={{ fontSize: 34, lineHeight: 1, fontWeight: 500, color: 'var(--ink)' }}>{item.b}</span>
+            <span className={N} style={{ fontSize: 15, color: 'var(--muted)' }}>{item.e} · {item.pos}</span>
           </div>
-          <button onClick={() => speaker.speak(item.b)} style={{ width: 44, height: 44, borderRadius: '50%', background: 'var(--surface-2)', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+          <button onClick={() => speaker.speak(item.b, T)} style={{ width: 44, height: 44, borderRadius: '50%', background: 'var(--surface-2)', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
             <SpeakerIcon />
           </button>
         </div>
 
         {(item.example_b || item.example_e) && (
           <div style={{ background: 'var(--surface-2)', borderRadius: 14, padding: '13px 15px', display: 'flex', flexDirection: 'column', gap: 5 }}>
-            {item.example_b && <span className="id" style={{ fontSize: 18, color: 'var(--ink)' }}>{item.example_b}</span>}
-            {item.example_e && <span className="en" style={{ fontSize: 13, color: 'var(--muted)' }}>{item.example_e}</span>}
+            {item.example_b && <span className={T} style={{ fontSize: 18, color: 'var(--ink)' }}>{item.example_b}</span>}
+            {item.example_e && <span className={N} style={{ fontSize: 13, color: 'var(--muted)' }}>{item.example_e}</span>}
           </div>
         )}
 

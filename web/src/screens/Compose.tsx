@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { api, type TranslateResponse, type WordsResponse } from '../lib/api';
+import { api, LANG_NAME, type LangCode, type Profile, type TranslateResponse, type WordsResponse } from '../lib/api';
 import { speaker } from '../lib/audio';
 import { MoonIcon, SunIcon, CopyIcon, SpeakerIcon, ShareIcon, CheckIcon } from '../lib/icons';
 
@@ -10,6 +10,7 @@ interface Props {
   toggleDark: () => void;
   refresh: () => Promise<void> | void;
   toast: (t: string) => void;
+  profile: Profile;
   goReview: () => void;
 }
 
@@ -21,13 +22,14 @@ interface Result {
   dirLabel: string;
   target: string;
   source: string;
-  targetClass: 'id' | 'en';
-  sourceClass: 'id' | 'en';
+  targetClass: LangCode;
+  sourceClass: LangCode;
   gloss: Gloss[];
   literal: string;
   grammar: string;
   saved: Gloss[];
   speakText: string;
+  speakLang: LangCode;
   harvested: number;
 }
 
@@ -35,24 +37,33 @@ const ID_MARKERS = [
   'saya', 'kamu', 'terima kasih', 'tolong', 'bisa', 'besok', 'rapat', 'laporan',
   'kirim', 'pagi', 'hari ini', 'selesai', 'mari', 'sebelum', 'yang', 'dan', 'di',
 ];
-function detectLang(t: string): 'en' | 'id' {
+function detectLang(t: string): LangCode {
   const n = ' ' + t.toLowerCase().replace(/[^a-z0-9\s']/g, '') + ' ';
   return ID_MARKERS.some((m) => n.includes(' ' + m + ' ')) ? 'id' : 'en';
 }
 
-function toResult(r: TranslateResponse, submitted: string): Result {
-  const en = r.detected_lang === 'en';
+// Build the display result generically from the user's native/target languages.
+function toResult(r: TranslateResponse, submitted: string, native: LangCode, target: LangCode): Result {
+  const detected = r.detected_lang as LangCode;
+  const naturalLang: LangCode = detected === native ? target : native; // natural is the other side
+  const targetIsSource = detected === target;
   return {
-    dirLabel: en ? 'English → Bahasa Indonesia' : 'Bahasa Indonesia → English',
+    dirLabel: `${LANG_NAME[detected]} → ${LANG_NAME[naturalLang]}`,
     target: r.natural,
     source: submitted,
-    targetClass: en ? 'id' : 'en',
-    sourceClass: en ? 'en' : 'id',
-    gloss: r.gloss.map((g) => ({ b: en ? g.tgt : g.src, e: en ? g.src : g.tgt })),
+    targetClass: naturalLang,
+    sourceClass: detected,
+    // b = target-language phrase, e = native-language phrase
+    gloss: r.gloss.map((g) => ({
+      b: targetIsSource ? g.src : g.tgt,
+      e: targetIsSource ? g.tgt : g.src,
+    })),
     literal: r.back_translation,
     grammar: r.grammar_note,
-    saved: r.items.map((it) => ({ b: it.lemma, e: it.gloss_en })),
-    speakText: en ? r.natural : submitted,
+    saved: r.items.map((it) => ({ b: it.lemma, e: it.gloss_l1 })),
+    // Speaker plays the TARGET-language side regardless of direction.
+    speakText: targetIsSource ? submitted : r.natural,
+    speakLang: target,
     harvested: r.harvested,
   };
 }
@@ -64,7 +75,7 @@ const QUICK_PHRASES = [
   'Tolong kirim laporannya hari ini',
 ];
 
-export function Compose({ dueCount, dark, toggleDark, refresh, toast, goReview }: Props) {
+export function Compose({ dueCount, dark, toggleDark, refresh, toast, profile, goReview }: Props) {
   const [input, setInput] = useState('');
   const [result, setResult] = useState<Result | null>(null);
   const [loading, setLoading] = useState(false);
@@ -83,7 +94,7 @@ export function Compose({ dueCount, dark, toggleDark, refresh, toast, goReview }
     setGrammarOpen(false);
     try {
       const r = await api.translate(t);
-      const res = toResult(r, t);
+      const res = toResult(r, t, profile.native_lang, profile.target_lang);
       setResult(res);
       if (res.harvested > 0) toast(`Saved — ${res.harvested} added to your deck`);
       await refresh();
@@ -110,9 +121,7 @@ export function Compose({ dueCount, dark, toggleDark, refresh, toast, goReview }
   }
 
   const detected = input.trim() ? detectLang(input) : null;
-  const detectedLabel = detected
-    ? `Detected · ${detected === 'id' ? 'Bahasa Indonesia' : 'English'}`
-    : 'Auto-detect';
+  const detectedLabel = detected ? `Detected · ${LANG_NAME[detected]}` : 'Auto-detect';
 
   return (
     <div style={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
@@ -251,7 +260,7 @@ export function Compose({ dueCount, dark, toggleDark, refresh, toast, goReview }
                   <CopyIcon />
                   Copy
                 </button>
-                <button onClick={() => speaker.speak(result.speakText)} style={iconBtn}>
+                <button onClick={() => speaker.speak(result.speakText, result.speakLang)} style={iconBtn}>
                   <SpeakerIcon />
                 </button>
                 <button onClick={() => toast('Shared')} style={iconBtn}>

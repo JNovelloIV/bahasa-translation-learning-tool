@@ -1,6 +1,7 @@
 import { useCallback, useRef, useState } from 'react';
 import { useDarkMode } from './lib/theme';
 import { useDeck } from './lib/useDeck';
+import { useProfile } from './lib/useProfile';
 import type { DeckItem } from './lib/api';
 import { Compose } from './screens/Compose';
 import { Review } from './screens/Review';
@@ -13,6 +14,7 @@ export function App() {
   const [dark, toggleDark] = useDarkMode();
   const [tab, setTab] = useState<Tab>('compose');
   const { deck, dueCount, loading, error, refresh } = useDeck();
+  const { profile } = useProfile();
 
   const [sheetItem, setSheetItem] = useState<DeckItem | null>(null);
   const [toastText, setToastText] = useState('');
@@ -49,11 +51,19 @@ export function App() {
             toggleDark={toggleDark}
             refresh={refresh}
             toast={toast}
+            profile={profile}
             goReview={() => setTab('review')}
           />
         )}
         {tab === 'review' && (
-          <Review deck={deck} dueCount={dueCount} refresh={refresh} toast={toast} goCompose={() => setTab('compose')} />
+          <Review
+            deck={deck}
+            dueCount={dueCount}
+            refresh={refresh}
+            toast={toast}
+            profile={profile}
+            goCompose={() => setTab('compose')}
+          />
         )}
         {tab === 'words' && (
           <Words
@@ -61,6 +71,7 @@ export function App() {
             loading={loading}
             error={error}
             refresh={refresh}
+            profile={profile}
             openSheet={(it) => setSheetItem(it)}
           />
         )}
@@ -71,6 +82,7 @@ export function App() {
       {sheetItem && (
         <WordSheet
           item={sheetItem}
+          profile={profile}
           onClose={() => setSheetItem(null)}
           onReviewNow={() => {
             setSheetItem(null);

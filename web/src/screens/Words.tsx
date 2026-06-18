@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { nextLabel, type DeckItem, type WordsResponse } from '../lib/api';
+import { nextLabel, type DeckItem, type Profile, type WordsResponse } from '../lib/api';
 import { SearchIcon } from '../lib/icons';
 import { StrengthMeter } from '../components/StrengthMeter';
 
@@ -8,6 +8,7 @@ interface Props {
   loading: boolean;
   error: string;
   refresh: () => Promise<void> | void;
+  profile: Profile;
   openSheet: (it: DeckItem) => void;
 }
 
@@ -21,9 +22,11 @@ const FILTERS: Array<{ key: Filter; label: string }> = [
 
 const norm = (s: string) => s.toLowerCase().trim();
 
-export function Words({ deck, loading, error, refresh, openSheet }: Props) {
+export function Words({ deck, loading, error, refresh, profile, openSheet }: Props) {
   const [filter, setFilter] = useState<Filter>('all');
   const [search, setSearch] = useState('');
+  const T = profile.target_lang;
+  const N = profile.native_lang;
 
   const all = deck?.all ?? [];
   const q = norm(search);
@@ -85,8 +88,8 @@ export function Words({ deck, loading, error, refresh, openSheet }: Props) {
             style={{ width: '100%', background: 'none', border: 'none', borderBottom: '1px solid var(--line)', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 12, padding: '14px 20px', textAlign: 'left' }}
           >
             <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 2 }}>
-              <span className="id" style={{ fontSize: 19, color: 'var(--ink)', fontWeight: 500 }}>{d.b}</span>
-              <span className="en" style={{ fontSize: 13, color: 'var(--muted)' }}>{d.e} · {d.pos}</span>
+              <span className={T} style={{ fontSize: 19, color: 'var(--ink)', fontWeight: 500 }}>{d.b}</span>
+              <span className={N} style={{ fontSize: 13, color: 'var(--muted)' }}>{d.e} · {d.pos}</span>
             </div>
             <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 7 }}>
               <StrengthMeter value={d.strength} />

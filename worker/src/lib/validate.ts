@@ -44,7 +44,8 @@ export function validateTranslation(parsed: unknown): TranslationResult {
       lemma,
       surface: asString(r.surface, lemma),
       type,
-      gloss_en: asString(r.gloss_en),
+      // Prefer gloss_l1 (native-language gloss); accept gloss_en for robustness.
+      gloss_l1: asString(r.gloss_l1) || asString(r.gloss_en),
       root: typeof r.root === 'string' && r.root.trim() !== '' ? r.root : null,
       affixes: asStringArray(r.affixes),
     });

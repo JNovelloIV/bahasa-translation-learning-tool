@@ -1,5 +1,7 @@
 // Helpers to derive the design's display fields from stored rows.
 
+import type { LangCode } from '../types';
+
 export interface SentenceSide {
   text: string;
   translation: string;
@@ -7,12 +9,8 @@ export interface SentenceSide {
   created_at?: string;
 }
 
-// Items are always Bahasa. The Bahasa side of a source sentence is the original
-// text when the message was typed in Bahasa, else the translation.
-export function bahasaSide(s: SentenceSide): string {
-  return s.lang === 'id' ? s.text : s.translation;
-}
-
-export function englishSide(s: SentenceSide): string {
-  return s.lang === 'id' ? s.translation : s.text;
+// A source sentence stores `text` (in sentence.lang) and `translation` (the other
+// language). Return whichever side is written in `lang`.
+export function sideInLang(s: SentenceSide, lang: LangCode): string {
+  return s.lang === lang ? s.text : s.translation;
 }

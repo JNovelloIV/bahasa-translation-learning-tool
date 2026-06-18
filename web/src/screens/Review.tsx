@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { api, weekday, type ReviewCard, type WordsResponse } from '../lib/api';
+import { api, weekday, LANG_NAME, type Profile, type ReviewCard, type WordsResponse } from '../lib/api';
 import { speaker } from '../lib/audio';
 import { CloseIcon, SpeakerIcon, CheckIcon } from '../lib/icons';
 
@@ -8,6 +8,7 @@ interface Props {
   dueCount: number;
   refresh: () => Promise<void> | void;
   toast: (t: string) => void;
+  profile: Profile;
   goCompose: () => void;
 }
 
@@ -22,14 +23,20 @@ const GRADES = [
 
 const norm = (s: string) => s.toLowerCase().replace(/[^a-z0-9\s']/g, '').replace(/\s+/g, ' ').trim();
 
-const KICKER: Record<ReviewCard['card_type'], string> = {
-  recall: 'Say it in Bahasa',
-  cloze: 'Fill the blank',
-  listen: 'Listen & recall',
-  produce: 'Write it in Bahasa',
-};
+export function Review({ deck, dueCount, refresh, toast, profile, goCompose }: Props) {
+  const N = profile.native_lang; // cue typeface/language
+  const T = profile.target_lang; // answer typeface/language
+  const targetName = LANG_NAME[T];
 
-export function Review({ deck, dueCount, refresh, toast, goCompose }: Props) {
+  const kickerFor = (t: ReviewCard['card_type']) =>
+    t === 'recall'
+      ? `Say it in ${targetName}`
+      : t === 'cloze'
+        ? 'Fill the blank'
+        : t === 'listen'
+          ? 'Listen & recall'
+          : `Write it in ${targetName}`;
+
   const [stage, setStage] = useState<Stage>('hero');
   const [cards, setCards] = useState<ReviewCard[]>([]);
   const [idx, setIdx] = useState(0);
@@ -93,7 +100,7 @@ export function Review({ deck, dueCount, refresh, toast, goCompose }: Props) {
     if (!card || !attempt.trim() || busy) return;
     setBusy(true);
     try {
-      const r = await api.produce(card.item_id, attempt.trim(), card.prompt_en);
+      const r = await api.produce(card.item_id, attempt.trim(), card.prompt);
       setFeedback({ correct: r.correct, corrected: r.corrected, feedback: r.feedback });
       setRevealed(true);
       setDoneCount((n) => n + 1);
@@ -128,8 +135,8 @@ export function Review({ deck, dueCount, refresh, toast, goCompose }: Props) {
             <div style={{ display: 'flex', flexDirection: 'column', gap: 11, borderTop: '1px solid var(--line)', paddingTop: 18 }}>
               {preview.map((p) => (
                 <div key={p.id} style={{ display: 'flex', alignItems: 'baseline', gap: 10 }}>
-                  <span className="id" style={{ fontSize: 18, color: 'var(--ink)', fontWeight: 500, minWidth: 96 }}>{p.b}</span>
-                  <span className="en" style={{ fontSize: 13, color: 'var(--faint)' }}>{p.e}</span>
+                  <span className={T} style={{ fontSize: 18, color: 'var(--ink)', fontWeight: 500, minWidth: 96 }}>{p.b}</span>
+                  <span className={N} style={{ fontSize: 13, color: 'var(--faint)' }}>{p.e}</span>
                 </div>
               ))}
             </div>
@@ -198,21 +205,22 @@ export function Review({ deck, dueCount, refresh, toast, goCompose }: Props) {
 
       <div style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column', justifyContent: 'center', padding: '0 20px' }}>
         <div style={{ background: 'var(--surface)', border: '1px solid var(--line)', borderRadius: 24, padding: '26px 22px', boxShadow: '0 1px 2px rgba(40,25,10,.04),0 14px 34px rgba(40,25,10,.06)', display: 'flex', flexDirection: 'column', gap: 6 }}>
-          <span className="en" style={kicker}>{KICKER[card.card_type]}</span>
+          <span className="en" style={kicker}>{kickerFor(card.card_type)}</span>
 
-          {/* Prompt area varies by card type */}
+          {/* Prompt area varies by card type. Cloze shows the target sentence;
+              listen plays the target audio; recall/produce show the native cue. */}
           {card.card_type === 'cloze' ? (
-            <span className="id" style={{ fontSize: 26, lineHeight: 1.25, fontWeight: 500, color: 'var(--ink)', marginTop: 6 }}>{card.cloze}</span>
+            <span className={T} style={{ fontSize: 26, lineHeight: 1.25, fontWeight: 500, color: 'var(--ink)', marginTop: 6 }}>{card.cloze}</span>
           ) : card.card_type === 'listen' ? (
-            <button onClick={() => speaker.speak(card.b)} className="en" style={{ marginTop: 8, alignSelf: 'flex-start', display: 'flex', alignItems: 'center', gap: 8, background: 'var(--surface-2)', border: 'none', borderRadius: 14, padding: '12px 16px', cursor: 'pointer', color: 'var(--ink)', fontSize: 15, fontWeight: 600 }}>
+            <button onClick={() => speaker.speak(card.b, T)} className="en" style={{ marginTop: 8, alignSelf: 'flex-start', display: 'flex', alignItems: 'center', gap: 8, background: 'var(--surface-2)', border: 'none', borderRadius: 14, padding: '12px 16px', cursor: 'pointer', color: 'var(--ink)', fontSize: 15, fontWeight: 600 }}>
               <SpeakerIcon /> Play audio
             </button>
           ) : (
-            <span className="en" style={{ fontSize: 36, lineHeight: 1.1, fontWeight: 600, color: 'var(--ink)', marginTop: 6 }}>{card.prompt_en}</span>
+            <span className={N} style={{ fontSize: 36, lineHeight: 1.1, fontWeight: 600, color: 'var(--ink)', marginTop: 6 }}>{card.prompt}</span>
           )}
 
-          <span className="en" style={{ fontSize: 13, color: 'var(--muted)' }}>
-            {card.card_type === 'cloze' || card.card_type === 'listen' ? card.prompt_en : card.pos}
+          <span className={card.card_type === 'cloze' || card.card_type === 'listen' ? N : 'en'} style={{ fontSize: 13, color: 'var(--muted)' }}>
+            {card.card_type === 'cloze' || card.card_type === 'listen' ? card.prompt : card.pos}
           </span>
           {card.source_date && (
             <span className="en" style={{ fontSize: 12, color: 'var(--faint)', marginTop: 8, display: 'flex', alignItems: 'center', gap: 6 }}>
@@ -220,13 +228,13 @@ export function Review({ deck, dueCount, refresh, toast, goCompose }: Props) {
             </span>
           )}
 
-          {/* Input before reveal */}
+          {/* Input before reveal — the learner produces the TARGET language */}
           {!revealed && !isProduce && (
             <input
               value={attempt}
               onChange={(e) => setAttempt(e.target.value)}
               placeholder="type your answer (optional)"
-              className="id"
+              className={T}
               style={{ marginTop: 16, width: '100%', border: 'none', borderBottom: '1.5px solid var(--line)', background: 'none', padding: '8px 2px', fontSize: 20, color: 'var(--ink)', outline: 'none' }}
             />
           )}
@@ -234,9 +242,9 @@ export function Review({ deck, dueCount, refresh, toast, goCompose }: Props) {
             <textarea
               value={attempt}
               onChange={(e) => setAttempt(e.target.value)}
-              placeholder="write the full sentence in Bahasa…"
+              placeholder={`write the full sentence in ${targetName}…`}
               rows={2}
-              className="id"
+              className={T}
               style={{ marginTop: 16, width: '100%', resize: 'none', border: '1px solid var(--line)', background: 'var(--surface-2)', borderRadius: 12, padding: '10px 12px', fontSize: 18, color: 'var(--ink)', outline: 'none' }}
             />
           )}
@@ -245,8 +253,8 @@ export function Review({ deck, dueCount, refresh, toast, goCompose }: Props) {
           {revealed && (
             <div style={{ marginTop: 16, borderTop: '1px solid var(--line)', paddingTop: 16, display: 'flex', flexDirection: 'column', gap: 12, animation: 'rev .3s ease both' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
-                <span className="id" style={{ fontSize: 32, lineHeight: 1, fontWeight: 500, color: 'var(--ink)' }}>{card.b}</span>
-                <button onClick={() => speaker.speak(card.b)} style={{ width: 34, height: 34, borderRadius: '50%', background: 'var(--surface-2)', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                <span className={T} style={{ fontSize: 32, lineHeight: 1, fontWeight: 500, color: 'var(--ink)' }}>{card.b}</span>
+                <button onClick={() => speaker.speak(card.b, T)} style={{ width: 34, height: 34, borderRadius: '50%', background: 'var(--surface-2)', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                   <SpeakerIcon size={16} big={false} />
                 </button>
                 {attemptMatch && !isProduce && (
@@ -267,8 +275,8 @@ export function Review({ deck, dueCount, refresh, toast, goCompose }: Props) {
 
               {(card.example_b || card.example_e) && (
                 <div style={{ background: 'var(--surface-2)', borderRadius: 12, padding: '11px 13px', display: 'flex', flexDirection: 'column', gap: 4 }}>
-                  {card.example_b && <span className="id" style={{ fontSize: 16, color: 'var(--ink)' }}>{card.example_b}</span>}
-                  {card.example_e && <span className="en" style={{ fontSize: 12.5, color: 'var(--muted)' }}>{card.example_e}</span>}
+                  {card.example_b && <span className={T} style={{ fontSize: 16, color: 'var(--ink)' }}>{card.example_b}</span>}
+                  {card.example_e && <span className={N} style={{ fontSize: 12.5, color: 'var(--muted)' }}>{card.example_e}</span>}
                 </div>
               )}
             </div>

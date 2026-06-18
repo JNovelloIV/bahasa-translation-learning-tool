@@ -1,9 +1,9 @@
 import { Hono } from 'hono';
 import type { Env } from '../types';
-import { getUserId } from '../lib/auth';
+import { resolveUser } from '../lib/auth';
 import { callModelJSON } from '../lib/anthropic';
 import { validateTranslation } from '../lib/validate';
-import { TRANSLATION_SYSTEM_PROMPT } from '../lib/prompts';
+import { buildTranslationSystemPrompt } from '../lib/prompts';
 import { harvestTranslation } from '../lib/harvest';
 
 const app = new Hono<{ Bindings: Env }>();
@@ -22,7 +22,7 @@ app.post('/', async (c) => {
   if (!text) return c.json({ error: 'Missing "text"' }, 400);
   if (text.length > 2000) return c.json({ error: 'Text too long (max 2000 chars)' }, 400);
 
-  const userId = getUserId(c);
+  const user = await resolveUser(c);
 
   let result;
   try {
@@ -30,7 +30,7 @@ app.post('/', async (c) => {
       c.env,
       {
         model: c.env.MODEL_TRANSLATE,
-        system: TRANSLATION_SYSTEM_PROMPT,
+        system: buildTranslationSystemPrompt(user.native_lang, user.target_lang),
         messages: [{ role: 'user', content: text }],
         maxTokens: 1500,
         temperature: 0,
@@ -45,7 +45,7 @@ app.post('/', async (c) => {
   // Harvest is best-effort: never fail the translation if storage hiccups.
   let harvest = { sentenceId: '', itemsUpserted: 0 };
   try {
-    harvest = await harvestTranslation({ env: c.env, userId, inputText: text, result });
+    harvest = await harvestTranslation({ env: c.env, userId: user.id, inputText: text, result });
   } catch (err) {
     console.error('harvest error:', err);
   }

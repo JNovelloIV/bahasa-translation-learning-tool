@@ -54,7 +54,7 @@ app.get('/', async (c) => {
       aboutToForget.push({
         id: it.id,
         lemma: it.lemma,
-        gloss_en: it.gloss_en,
+        gloss: it.gloss_l1,
         use_count: it.use_count,
         retrievability: Math.round(r * 100) / 100,
         due: it.due,

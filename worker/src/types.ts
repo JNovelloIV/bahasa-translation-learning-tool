@@ -17,11 +17,13 @@ export interface GlossPair {
   tgt: string;
 }
 
+export type LangCode = 'en' | 'id';
+
 export interface ExtractedItem {
   lemma: string;
   surface: string;
   type: 'word' | 'phrase';
-  gloss_en: string;
+  gloss_l1: string; // gloss in the learner's NATIVE language
   root: string | null;
   affixes: string[];
 }
@@ -52,7 +54,7 @@ export interface ItemRow {
   lemma: string;
   surface: string | null;
   type: 'word' | 'phrase';
-  gloss_en: string;
+  gloss_l1: string;
   root: string | null;
   affixes_json: string | null;
   use_count: number;
@@ -70,5 +72,14 @@ export interface SentenceRow {
   lang: 'en' | 'id';
   text: string;
   translation: string;
+  created_at: string;
+}
+
+export interface UserRow {
+  id: string;
+  display_name: string;
+  pin_hash: string | null;
+  native_lang: LangCode;
+  target_lang: LangCode;
   created_at: string;
 }

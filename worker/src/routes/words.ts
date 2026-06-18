@@ -1,8 +1,8 @@
 import { Hono } from 'hono';
 import type { Env, ItemRow } from '../types';
-import { getUserId } from '../lib/auth';
+import { resolveUser } from '../lib/auth';
 import { strength } from '../lib/scheduler';
-import { bahasaSide, englishSide } from '../lib/derive';
+import { sideInLang } from '../lib/derive';
 
 const app = new Hono<{ Bindings: Env }>();
 
@@ -18,7 +18,8 @@ interface SourceJoin {
 // GET /words — the full corpus with everything the Words screen + detail sheet need:
 // strength meter, due flag, a usage example, and the source message it was saved from.
 app.get('/', async (c) => {
-  const userId = getUserId(c);
+  const user = await resolveUser(c);
+  const userId = user.id;
   const nowIso = new Date().toISOString();
 
   const itemsRes = await c.env.DB.prepare(
@@ -55,8 +56,8 @@ app.get('/', async (c) => {
     return {
       id: it.id,
       b: it.lemma,
-      e: it.gloss_en,
-      pos: it.type, // design shows "English · pos"; we surface word/phrase
+      e: it.gloss_l1,
+      pos: it.type, // design shows "<gloss> · pos"; we surface word/phrase
       type: it.type,
       root: it.root,
       affixes: it.affixes_json ? safeArr(it.affixes_json) : [],
@@ -68,8 +69,8 @@ app.get('/', async (c) => {
       graduated: it.graduated === 1,
       first_seen: it.first_seen,
       last_used: it.last_used,
-      example_b: recent ? bahasaSide(recent) : null,
-      example_e: recent ? englishSide(recent) : null,
+      example_b: recent ? sideInLang(recent, user.target_lang) : null,
+      example_e: recent ? sideInLang(recent, user.native_lang) : null,
       source_msg: earliest ? earliest.text : null,
       source_date: earliest ? earliest.created_at : null,
       sources: srcs.map((s) => ({

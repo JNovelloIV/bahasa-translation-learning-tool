@@ -3,6 +3,9 @@
 
 const API_BASE = import.meta.env.VITE_API_BASE ?? '/api';
 
+export type LangCode = 'en' | 'id';
+export const LANG_NAME: Record<LangCode, string> = { en: 'English', id: 'Bahasa Indonesia' };
+
 async function req<T>(path: string, init?: RequestInit): Promise<T> {
   const res = await fetch(`${API_BASE}${path}`, {
     ...init,
@@ -26,7 +29,7 @@ export interface ExtractedItem {
   lemma: string;
   surface: string;
   type: 'word' | 'phrase';
-  gloss_en: string;
+  gloss_l1: string;
   root: string | null;
   affixes: string[];
 }
@@ -47,11 +50,10 @@ export type CardType = 'recall' | 'cloze' | 'listen' | 'produce';
 export interface ReviewCard {
   item_id: string;
   card_type: CardType;
-  b: string; // Bahasa answer
+  b: string; // target-language answer
   lemma: string;
   surface: string | null;
-  prompt_en: string;
-  gloss_en: string;
+  prompt: string; // cue in the learner's native language
   pos: string;
   type: 'word' | 'phrase';
   root: string | null;
@@ -120,7 +122,15 @@ export interface WordsResponse {
   mastered: DeckItem[];
 }
 
+export interface Profile {
+  id: string;
+  display_name: string;
+  native_lang: LangCode;
+  target_lang: LangCode;
+}
+
 export const api = {
+  me: () => req<Profile>('/me'),
   translate: (text: string) =>
     req<TranslateResponse>('/translate', { method: 'POST', body: JSON.stringify({ text }) }),
   queue: () => req<QueueResponse>('/review/queue'),

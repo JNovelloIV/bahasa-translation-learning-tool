@@ -1,11 +1,11 @@
 import { Hono } from 'hono';
 import type { Env, ItemRow } from '../types';
-import { getUserId } from '../lib/auth';
+import { getUserId, resolveUser } from '../lib/auth';
 import { applyReview, strength, type UiRating } from '../lib/scheduler';
 import { callModelJSON } from '../lib/anthropic';
 import { validateProduce } from '../lib/validate';
 import { buildProduceSystemPrompt, buildProduceUserPrompt } from '../lib/prompts';
-import { bahasaSide, englishSide } from '../lib/derive';
+import { sideInLang } from '../lib/derive';
 
 const app = new Hono<{ Bindings: Env }>();
 
@@ -63,7 +63,8 @@ function makeCloze(sentence: string, surface: string, lemma: string): string | n
 
 // GET /review/queue — items past their FSRS due date, most-used first.
 app.get('/queue', async (c) => {
-  const userId = getUserId(c);
+  const user = await resolveUser(c);
+  const userId = user.id;
   const nowIso = new Date().toISOString();
 
   // Total due (for the hero number / badge), independent of the page limit.
@@ -96,18 +97,18 @@ app.get('/queue', async (c) => {
     let cloze: string | null = null;
 
     if (cardType === 'cloze') {
-      cloze = src ? makeCloze(bahasaSide(src), it.surface ?? '', it.lemma) : null;
+      cloze = src ? makeCloze(sideInLang(src, user.target_lang), it.surface ?? '', it.lemma) : null;
       if (!cloze) cardType = 'recall'; // no usable sentence -> fall back
     }
 
     cards.push({
       item_id: it.id,
       card_type: cardType,
-      b: it.lemma, // Bahasa answer
+      b: it.lemma, // target-language answer (produce direction = native -> target)
       lemma: it.lemma,
       surface: it.surface,
-      prompt_en: it.gloss_en,
-      gloss_en: it.gloss_en,
+      prompt: it.gloss_l1, // cue shown in the learner's native language
+      gloss_l1: it.gloss_l1,
       pos: it.type,
       type: it.type,
       root: it.root,
@@ -117,8 +118,8 @@ app.get('/queue', async (c) => {
       due: it.due,
       state: it.state,
       cloze,
-      example_b: src ? bahasaSide(src) : null,
-      example_e: src ? englishSide(src) : null,
+      example_b: src ? sideInLang(src, user.target_lang) : null,
+      example_e: src ? sideInLang(src, user.native_lang) : null,
       source_date: src ? src.created_at : null,
     });
   }
@@ -185,7 +186,7 @@ app.post('/produce', async (c) => {
     return c.json({ error: 'Invalid JSON body' }, 400);
   }
 
-  const userId = getUserId(c);
+  const user = await resolveUser(c);
   const itemId = typeof body.item_id === 'string' ? body.item_id : '';
   const attempt = typeof body.attempt === 'string' ? body.attempt.trim() : '';
   const targetMeaning = typeof body.target_meaning === 'string' ? body.target_meaning.trim() : '';
@@ -194,13 +195,13 @@ app.post('/produce', async (c) => {
   if (!attempt) return c.json({ error: 'Missing attempt' }, 400);
 
   const item = await c.env.DB.prepare(
-    `SELECT id, gloss_en, fsrs_json FROM items WHERE id = ? AND user_id = ?`,
+    `SELECT id, gloss_l1, fsrs_json FROM items WHERE id = ? AND user_id = ?`,
   )
-    .bind(itemId, userId)
-    .first<{ id: string; gloss_en: string; fsrs_json: string | null }>();
+    .bind(itemId, user.id)
+    .first<{ id: string; gloss_l1: string; fsrs_json: string | null }>();
   if (!item) return c.json({ error: 'Item not found' }, 404);
 
-  const meaning = targetMeaning || item.gloss_en;
+  const meaning = targetMeaning || item.gloss_l1;
 
   let graded;
   try {
@@ -208,8 +209,13 @@ app.post('/produce', async (c) => {
       c.env,
       {
         model: c.env.MODEL_GRADE,
-        system: buildProduceSystemPrompt(),
-        messages: [{ role: 'user', content: buildProduceUserPrompt(meaning, attempt) }],
+        system: buildProduceSystemPrompt(user.native_lang, user.target_lang),
+        messages: [
+          {
+            role: 'user',
+            content: buildProduceUserPrompt(user.native_lang, user.target_lang, meaning, attempt),
+          },
+        ],
         maxTokens: 500,
         temperature: 0,
       },
