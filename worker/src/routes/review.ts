@@ -1,10 +1,11 @@
 import { Hono } from 'hono';
 import type { Env, ItemRow } from '../types';
 import { getUserId } from '../lib/auth';
-import { applyReview, type UiRating } from '../lib/scheduler';
+import { applyReview, strength, type UiRating } from '../lib/scheduler';
 import { callModelJSON } from '../lib/anthropic';
 import { validateProduce } from '../lib/validate';
 import { buildProduceSystemPrompt, buildProduceUserPrompt } from '../lib/prompts';
+import { bahasaSide, englishSide } from '../lib/derive';
 
 const app = new Hono<{ Bindings: Env }>();
 
@@ -30,15 +31,13 @@ interface SourceRow {
   text: string;
   translation: string;
   lang: 'en' | 'id';
+  created_at: string;
 }
 
-/** Pick a real source sentence's Bahasa side for cloze/context. */
-async function bahasaSource(
-  env: Env,
-  itemId: string,
-): Promise<string | null> {
+/** Pick the most recent source sentence for an item (for cloze + examples). */
+async function recentSource(env: Env, itemId: string): Promise<SourceRow | null> {
   const row = await env.DB.prepare(
-    `SELECT s.text, s.translation, s.lang
+    `SELECT s.text, s.translation, s.lang, s.created_at
        FROM item_sources isrc
        JOIN sentences s ON s.id = isrc.sentence_id
       WHERE isrc.item_id = ?
@@ -47,9 +46,7 @@ async function bahasaSource(
   )
     .bind(itemId)
     .first<SourceRow>();
-  if (!row) return null;
-  // Items are always Bahasa: that's `text` when the message was in id, else the translation.
-  return row.lang === 'id' ? row.text : row.translation;
+  return row ?? null;
 }
 
 /** Blank the target out of a sentence (case-insensitive, first occurrence). */
@@ -69,6 +66,15 @@ app.get('/queue', async (c) => {
   const userId = getUserId(c);
   const nowIso = new Date().toISOString();
 
+  // Total due (for the hero number / badge), independent of the page limit.
+  const dueTotalRow = await c.env.DB.prepare(
+    `SELECT COUNT(*) AS n FROM items
+      WHERE user_id = ? AND graduated = 0 AND (due IS NULL OR due <= ?)`,
+  )
+    .bind(userId, nowIso)
+    .first<{ n: number }>();
+
+  // Weakest-first (then most-used) — matches the design's "weakest first" queue.
   const rows = await c.env.DB.prepare(
     `SELECT * FROM items
       WHERE user_id = ? AND graduated = 0
@@ -86,35 +92,41 @@ app.get('/queue', async (c) => {
     const it = items[i];
     let cardType = PATTERN[i % PATTERN.length];
 
+    const src = await recentSource(c.env, it.id);
     let cloze: string | null = null;
-    let example: string | null = null;
 
     if (cardType === 'cloze') {
-      const src = await bahasaSource(c.env, it.id);
-      cloze = src ? makeCloze(src, it.surface ?? '', it.lemma) : null;
+      cloze = src ? makeCloze(bahasaSide(src), it.surface ?? '', it.lemma) : null;
       if (!cloze) cardType = 'recall'; // no usable sentence -> fall back
-    } else {
-      example = await bahasaSource(c.env, it.id);
     }
 
     cards.push({
       item_id: it.id,
       card_type: cardType,
+      b: it.lemma, // Bahasa answer
       lemma: it.lemma,
       surface: it.surface,
+      prompt_en: it.gloss_en,
       gloss_en: it.gloss_en,
+      pos: it.type,
       type: it.type,
       root: it.root,
       affixes: it.affixes_json ? safeArr(it.affixes_json) : [],
       use_count: it.use_count,
+      strength: strength(it.fsrs_json, false),
       due: it.due,
       state: it.state,
       cloze,
-      example,
+      example_b: src ? bahasaSide(src) : null,
+      example_e: src ? englishSide(src) : null,
+      source_date: src ? src.created_at : null,
     });
   }
 
-  return c.json({ count: cards.length, cards });
+  // weakest-first ordering for the actual study sequence
+  cards.sort((a, b) => a.strength - b.strength);
+
+  return c.json({ count: cards.length, due_total: dueTotalRow?.n ?? 0, cards });
 });
 
 // POST /review/grade  { item_id, rating, mode }

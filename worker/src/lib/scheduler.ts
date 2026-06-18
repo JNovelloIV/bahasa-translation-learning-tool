@@ -104,3 +104,23 @@ export function retrievability(fsrs_json: string | null, now = new Date()): numb
   const card = loadCard(fsrs_json, now);
   return f.get_retrievability(card, now, false) as number;
 }
+
+/**
+ * Memory strength on the design's 1–5 scale (the segmented meter), derived from
+ * FSRS stability (days). Graduated items are fully strong.
+ */
+export function strength(fsrs_json: string | null, graduated = false): number {
+  if (graduated) return 5;
+  if (!fsrs_json) return 1;
+  let stability = 0;
+  try {
+    stability = (JSON.parse(fsrs_json) as { stability?: number }).stability ?? 0;
+  } catch {
+    return 1;
+  }
+  if (stability < 1) return 1;
+  if (stability < 3) return 2;
+  if (stability < 10) return 3;
+  if (stability < 30) return 4;
+  return 5;
+}

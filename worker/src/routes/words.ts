@@ -1,6 +1,8 @@
 import { Hono } from 'hono';
 import type { Env, ItemRow } from '../types';
 import { getUserId } from '../lib/auth';
+import { strength } from '../lib/scheduler';
+import { bahasaSide, englishSide } from '../lib/derive';
 
 const app = new Hono<{ Bindings: Env }>();
 
@@ -13,11 +15,11 @@ interface SourceJoin {
   created_at: string;
 }
 
-// GET /words — the full corpus, sorted by use_count, with source sentences.
-// Returns words and phrases separated plus a mastered section; the client can
-// further group by morphological family (shared root).
+// GET /words — the full corpus with everything the Words screen + detail sheet need:
+// strength meter, due flag, a usage example, and the source message it was saved from.
 app.get('/', async (c) => {
   const userId = getUserId(c);
+  const nowIso = new Date().toISOString();
 
   const itemsRes = await c.env.DB.prepare(
     `SELECT * FROM items WHERE user_id = ? ORDER BY use_count DESC, lemma ASC`,
@@ -26,7 +28,7 @@ app.get('/', async (c) => {
     .all<ItemRow>();
   const items = itemsRes.results ?? [];
 
-  // Pull all sources in one pass and bucket by item_id.
+  // All sources in one pass, newest first, bucketed by item.
   const srcRes = await c.env.DB.prepare(
     `SELECT isrc.item_id, s.id AS sentence_id, s.text, s.translation, s.lang, s.created_at
        FROM item_sources isrc
@@ -38,42 +40,57 @@ app.get('/', async (c) => {
     .bind(userId)
     .all<SourceJoin>();
 
-  const sourcesByItem = new Map<string, Array<Omit<SourceJoin, 'item_id'>>>();
+  const sourcesByItem = new Map<string, SourceJoin[]>();
   for (const r of srcRes.results ?? []) {
     const list = sourcesByItem.get(r.item_id) ?? [];
-    list.push({
-      sentence_id: r.sentence_id,
-      text: r.text,
-      translation: r.translation,
-      lang: r.lang,
-      created_at: r.created_at,
-    });
+    list.push(r);
     sourcesByItem.set(r.item_id, list);
   }
 
-  const shape = (it: ItemRow) => ({
-    id: it.id,
-    lemma: it.lemma,
-    surface: it.surface,
-    type: it.type,
-    gloss_en: it.gloss_en,
-    root: it.root,
-    affixes: it.affixes_json ? safeArr(it.affixes_json) : [],
-    use_count: it.use_count,
-    first_seen: it.first_seen,
-    last_used: it.last_used,
-    due: it.due,
-    state: it.state,
-    graduated: it.graduated === 1,
-    sources: sourcesByItem.get(it.id) ?? [],
-  });
+  const shape = (it: ItemRow) => {
+    const srcs = sourcesByItem.get(it.id) ?? [];
+    const recent = srcs[0]; // newest
+    const earliest = srcs[srcs.length - 1]; // oldest = "first saved from"
+    const isDue = it.graduated === 0 && (it.due === null || it.due <= nowIso);
+    return {
+      id: it.id,
+      b: it.lemma,
+      e: it.gloss_en,
+      pos: it.type, // design shows "English · pos"; we surface word/phrase
+      type: it.type,
+      root: it.root,
+      affixes: it.affixes_json ? safeArr(it.affixes_json) : [],
+      use_count: it.use_count,
+      strength: strength(it.fsrs_json, it.graduated === 1),
+      is_due: isDue,
+      due: it.due,
+      state: it.state,
+      graduated: it.graduated === 1,
+      first_seen: it.first_seen,
+      last_used: it.last_used,
+      example_b: recent ? bahasaSide(recent) : null,
+      example_e: recent ? englishSide(recent) : null,
+      source_msg: earliest ? earliest.text : null,
+      source_date: earliest ? earliest.created_at : null,
+      sources: srcs.map((s) => ({
+        sentence_id: s.sentence_id,
+        text: s.text,
+        translation: s.translation,
+        lang: s.lang,
+        created_at: s.created_at,
+      })),
+    };
+  };
 
   const shaped = items.map(shape);
   const mastered = shaped.filter((i) => i.graduated);
   const active = shaped.filter((i) => !i.graduated);
+  const dueCount = active.filter((i) => i.is_due).length;
 
   return c.json({
     total: shaped.length,
+    due_count: dueCount,
+    all: shaped, // single deck (design's source of truth)
     words: active.filter((i) => i.type === 'word'),
     phrases: active.filter((i) => i.type === 'phrase'),
     mastered,

@@ -1,301 +1,325 @@
-import { useEffect, useState } from 'react';
-import { api, type ReviewCard } from '../lib/api';
+import { useState } from 'react';
+import { api, weekday, type ReviewCard, type WordsResponse } from '../lib/api';
 import { speaker } from '../lib/audio';
+import { CloseIcon, SpeakerIcon, CheckIcon } from '../lib/icons';
 
-const GRADES: Array<{ id: 'again' | 'hard' | 'good' | 'easy'; label: string }> = [
-  { id: 'again', label: 'Again' },
-  { id: 'hard', label: 'Hard' },
-  { id: 'good', label: 'Good' },
-  { id: 'easy', label: 'Easy' },
-];
+interface Props {
+  deck: WordsResponse | null;
+  dueCount: number;
+  refresh: () => Promise<void> | void;
+  toast: (t: string) => void;
+  goCompose: () => void;
+}
 
-export function Review() {
+type Stage = 'hero' | 'active' | 'done';
+
+const GRADES = [
+  { key: 'again', label: 'Again', sub: '<1m' },
+  { key: 'hard', label: 'Hard', sub: '2d' },
+  { key: 'good', label: 'Good', sub: '4d' },
+  { key: 'easy', label: 'Easy', sub: '9d' },
+] as const;
+
+const norm = (s: string) => s.toLowerCase().replace(/[^a-z0-9\s']/g, '').replace(/\s+/g, ' ').trim();
+
+const KICKER: Record<ReviewCard['card_type'], string> = {
+  recall: 'Say it in Bahasa',
+  cloze: 'Fill the blank',
+  listen: 'Listen & recall',
+  produce: 'Write it in Bahasa',
+};
+
+export function Review({ deck, dueCount, refresh, toast, goCompose }: Props) {
+  const [stage, setStage] = useState<Stage>('hero');
   const [cards, setCards] = useState<ReviewCard[]>([]);
   const [idx, setIdx] = useState(0);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState('');
   const [revealed, setRevealed] = useState(false);
-  const [busy, setBusy] = useState(false);
-
-  // free-production state
   const [attempt, setAttempt] = useState('');
-  const [feedback, setFeedback] = useState<{ correct: boolean; corrected: string; feedback: string } | null>(
-    null,
-  );
+  const [doneCount, setDoneCount] = useState(0);
+  const [busy, setBusy] = useState(false);
+  const [feedback, setFeedback] = useState<{ correct: boolean; corrected: string; feedback: string } | null>(null);
 
-  async function load() {
-    setLoading(true);
-    setError('');
+  const card = cards[idx];
+  const total = cards.length;
+  const progressPct = total ? Math.round((idx / total) * 100) : 0;
+  const attemptMatch = card ? norm(attempt) === norm(card.b) && norm(attempt).length > 0 : false;
+
+  async function begin() {
+    setBusy(true);
     try {
       const r = await api.queue();
       setCards(r.cards);
       setIdx(0);
-      reset();
-    } catch (e) {
-      setError(e instanceof Error ? e.message : 'Could not load queue');
+      setRevealed(false);
+      setAttempt('');
+      setFeedback(null);
+      setDoneCount(0);
+      setStage(r.cards.length ? 'active' : 'hero');
+      if (!r.cards.length) toast('Nothing due right now');
+    } catch {
+      toast('Could not load review');
     } finally {
-      setLoading(false);
+      setBusy(false);
     }
   }
 
-  useEffect(() => {
-    load();
-  }, []);
-
-  function reset() {
+  function advance() {
     setRevealed(false);
     setAttempt('');
     setFeedback(null);
-  }
-
-  function next() {
-    reset();
-    setIdx((i) => i + 1);
-  }
-
-  const card = cards[idx];
-
-  async function grade(rating: 'again' | 'hard' | 'good' | 'easy') {
-    if (!card) return;
-    setBusy(true);
-    try {
-      await api.grade(card.item_id, rating, card.card_type);
-      next();
-    } catch (e) {
-      setError(e instanceof Error ? e.message : 'Grade failed');
-    } finally {
-      setBusy(false);
+    if (idx + 1 >= total) {
+      setStage('done');
+      refresh();
+    } else {
+      setIdx(idx + 1);
     }
   }
 
-  async function submitProduce() {
-    if (!card || !attempt.trim()) return;
+  async function grade(key: string) {
+    if (!card || busy) return;
     setBusy(true);
-    setError('');
+    setDoneCount((n) => n + 1);
     try {
-      const r = await api.produce(card.item_id, attempt.trim(), card.gloss_en);
+      await api.grade(card.item_id, key, card.card_type);
+    } catch {
+      toast('Grade failed');
+    } finally {
+      setBusy(false);
+      advance();
+    }
+  }
+
+  async function checkProduce() {
+    if (!card || !attempt.trim() || busy) return;
+    setBusy(true);
+    try {
+      const r = await api.produce(card.item_id, attempt.trim(), card.prompt_en);
       setFeedback({ correct: r.correct, corrected: r.corrected, feedback: r.feedback });
-    } catch (e) {
-      setError(e instanceof Error ? e.message : 'Could not grade');
+      setRevealed(true);
+      setDoneCount((n) => n + 1);
+    } catch {
+      toast('Could not check');
     } finally {
       setBusy(false);
     }
   }
 
-  if (loading) return <main className="screen"><p className="muted">Loading queue…</p></main>;
-  if (error) {
+  // ---------- HERO ----------
+  if (stage === 'hero') {
+    const preview = (deck?.all ?? []).filter((d) => d.is_due).slice(0, 4);
     return (
-      <main className="screen">
-        <p className="error">{error}</p>
-        <button onClick={load}>Retry</button>
-      </main>
-    );
-  }
-  if (cards.length === 0 || idx >= cards.length) {
-    return (
-      <main className="screen">
-        <div className="card">
-          <h3>All caught up</h3>
-          <p className="muted">
-            Nothing due right now. Keep messaging in Compose — the words you actually use surface
-            less, and Review fills the gaps.
-          </p>
-          <button className="primary" onClick={load} style={{ marginTop: 10 }}>
-            Refresh
-          </button>
+      <div style={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
+        <div style={{ flex: 'none', padding: '54px 24px 0' }}>
+          <span className="en" style={kicker}>Review</span>
         </div>
-      </main>
-    );
-  }
-
-  return (
-    <main className="screen">
-      <p className="small muted">
-        Card {idx + 1} of {cards.length} · {label(card.card_type)} · used {card.use_count}×
-      </p>
-
-      <div className="card">
-        {card.card_type === 'recall' && (
-          <Recall card={card} revealed={revealed} onReveal={() => setRevealed(true)} />
-        )}
-        {card.card_type === 'cloze' && (
-          <Cloze card={card} revealed={revealed} onReveal={() => setRevealed(true)} />
-        )}
-        {card.card_type === 'listen' && (
-          <Listen card={card} revealed={revealed} onReveal={() => setRevealed(true)} />
-        )}
-        {card.card_type === 'produce' && (
-          <Produce
-            card={card}
-            attempt={attempt}
-            setAttempt={setAttempt}
-            feedback={feedback}
-            onSubmit={submitProduce}
-            busy={busy}
-          />
-        )}
-      </div>
-
-      {/* Grading: produce auto-advances after feedback; others reveal then grade. */}
-      {card.card_type !== 'produce' && revealed && (
-        <div className="grades">
-          {GRADES.map((g) => (
-            <button key={g.id} className={g.id} disabled={busy} onClick={() => grade(g.id)}>
-              {g.label}
-            </button>
-          ))}
-        </div>
-      )}
-      {card.card_type === 'produce' && feedback && (
-        <button className="primary" onClick={next}>
-          Next →
-        </button>
-      )}
-    </main>
-  );
-}
-
-function Recall({ card, revealed, onReveal }: CardProps) {
-  return (
-    <>
-      <h3>Produce in Bahasa</h3>
-      <div className="natural">{card.gloss_en}</div>
-      {revealed ? (
-        <Answer card={card} />
-      ) : (
-        <button className="primary" style={{ marginTop: 12 }} onClick={onReveal}>
-          Show answer
-        </button>
-      )}
-    </>
-  );
-}
-
-function Cloze({ card, revealed, onReveal }: CardProps) {
-  return (
-    <>
-      <h3>Fill the blank</h3>
-      <div className="natural">{card.cloze}</div>
-      <p className="small muted" style={{ marginTop: 6 }}>
-        ({card.gloss_en})
-      </p>
-      {revealed ? (
-        <Answer card={card} />
-      ) : (
-        <button className="primary" style={{ marginTop: 12 }} onClick={onReveal}>
-          Show answer
-        </button>
-      )}
-    </>
-  );
-}
-
-function Listen({ card, revealed, onReveal }: CardProps) {
-  return (
-    <>
-      <h3>Listen &amp; recall</h3>
-      {speaker.supported ? (
-        <button className="primary" onClick={() => speaker.speak(card.lemma)}>
-          🔊 Play audio
-        </button>
-      ) : (
-        <p className="muted small">Audio not supported on this browser.</p>
-      )}
-      {revealed ? (
-        <Answer card={card} />
-      ) : (
-        <button style={{ marginTop: 12 }} onClick={onReveal}>
-          Show answer
-        </button>
-      )}
-    </>
-  );
-}
-
-function Produce({
-  card,
-  attempt,
-  setAttempt,
-  feedback,
-  onSubmit,
-  busy,
-}: {
-  card: ReviewCard;
-  attempt: string;
-  setAttempt: (s: string) => void;
-  feedback: { correct: boolean; corrected: string; feedback: string } | null;
-  onSubmit: () => void;
-  busy: boolean;
-}) {
-  return (
-    <>
-      <h3>Write it in Bahasa</h3>
-      <div className="natural">{card.gloss_en}</div>
-      <textarea
-        rows={2}
-        style={{ marginTop: 10 }}
-        placeholder="Your Bahasa sentence…"
-        value={attempt}
-        onChange={(e) => setAttempt(e.target.value)}
-        disabled={!!feedback}
-      />
-      {!feedback && (
-        <button
-          className="primary"
-          style={{ marginTop: 10 }}
-          onClick={onSubmit}
-          disabled={busy || !attempt.trim()}
-        >
-          {busy ? 'Checking…' : 'Check'}
-        </button>
-      )}
-      {feedback && (
-        <div style={{ marginTop: 10 }}>
-          <p className={feedback.correct ? 'success' : 'error'}>
-            {feedback.correct ? '✓ Correct' : '✗ Not quite'}
-          </p>
-          <p className="small">{feedback.feedback}</p>
-          {feedback.corrected && (
-            <p className="small muted">Model answer: {feedback.corrected}</p>
+        <div style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column', justifyContent: 'center', padding: '0 24px', gap: 20 }}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+            <span className="id" style={{ fontSize: 104, lineHeight: 0.82, fontWeight: 500, color: 'var(--accent)', letterSpacing: '-2px' }}>
+              {dueCount}
+            </span>
+            <span className="id" style={{ fontSize: 30, lineHeight: 1, fontWeight: 500, color: 'var(--ink)', marginTop: 10 }}>
+              words due today
+            </span>
+            <span className="en" style={{ fontSize: 14, color: 'var(--muted)', marginTop: 6 }}>
+              From messages you sent this week.
+            </span>
+          </div>
+          {preview.length > 0 && (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 11, borderTop: '1px solid var(--line)', paddingTop: 18 }}>
+              {preview.map((p) => (
+                <div key={p.id} style={{ display: 'flex', alignItems: 'baseline', gap: 10 }}>
+                  <span className="id" style={{ fontSize: 18, color: 'var(--ink)', fontWeight: 500, minWidth: 96 }}>{p.b}</span>
+                  <span className="en" style={{ fontSize: 13, color: 'var(--faint)' }}>{p.e}</span>
+                </div>
+              ))}
+            </div>
           )}
         </div>
-      )}
-    </>
-  );
-}
+        <div style={{ flex: 'none', padding: '14px 20px 28px' }}>
+          <button onClick={begin} disabled={busy || dueCount === 0} className="en" style={{ ...primaryBtn, opacity: busy || dueCount === 0 ? 0.55 : 1 }}>
+            {busy ? 'Loading…' : 'Begin review'}
+          </button>
+          <p className="en" style={{ textAlign: 'center', fontSize: 12, color: 'var(--faint)', margin: '11px 0 0' }}>
+            Recall first — the answer comes after you try.
+          </p>
+        </div>
+      </div>
+    );
+  }
 
-function Answer({ card }: { card: ReviewCard }) {
+  // ---------- DONE ----------
+  if (stage === 'done') {
+    return (
+      <div style={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
+        <div style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column', justifyContent: 'center', padding: '0 28px', gap: 16 }}>
+          <span className="id" style={{ fontSize: 58, lineHeight: 0.95, fontWeight: 500, color: 'var(--accent)' }}>Selesai.</span>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+            <span className="id" style={{ fontSize: 24, color: 'var(--ink)', fontWeight: 500 }}>Done for today</span>
+            <span className="en" style={{ fontSize: 14, color: 'var(--muted)' }}>
+              {doneCount} review{doneCount === 1 ? '' : 's'} done — see you tomorrow.
+            </span>
+          </div>
+          <div style={{ display: 'flex', gap: 5, flexWrap: 'wrap', borderTop: '1px solid var(--line)', paddingTop: 18 }}>
+            {Array.from({ length: doneCount }).map((_, i) => (
+              <span key={i} style={{ width: 18, height: 6, borderRadius: 99, background: 'var(--accent)', display: 'block' }} />
+            ))}
+          </div>
+          <span className="en" style={{ fontSize: 12, color: 'var(--faint)' }}>
+            Each one came from a message you actually sent.
+          </span>
+        </div>
+        <div style={{ flex: 'none', padding: '14px 20px 28px' }}>
+          <button onClick={() => { setStage('hero'); goCompose(); }} className="en" style={{ ...primaryBtn, background: 'var(--ink)', color: 'var(--bg)' }}>
+            Back to messages
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  // ---------- ACTIVE ----------
+  if (!card) return null;
+  const isProduce = card.card_type === 'produce';
+
   return (
-    <div style={{ marginTop: 12 }}>
-      <div className="natural">{card.lemma}</div>
-      {card.root && (
-        <p className="small muted">
-          root: {card.root}
-          {card.affixes.length > 0 && ` · ${card.affixes.join(', ')}`}
-        </p>
-      )}
-      {card.example && <p className="small muted">e.g. {card.example}</p>}
-      {speaker.supported && (
-        <button className="iconbtn" style={{ marginTop: 8 }} onClick={() => speaker.speak(card.lemma)}>
-          🔊 Hear it
-        </button>
-      )}
+    <div style={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
+      <div style={{ flex: 'none', padding: '50px 20px 8px', display: 'flex', flexDirection: 'column', gap: 11 }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+          <button onClick={() => setStage('hero')} style={{ width: 34, height: 34, borderRadius: '50%', background: 'var(--surface-2)', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+            <CloseIcon />
+          </button>
+          <span className="en" style={{ fontSize: 13, fontWeight: 600, color: 'var(--muted)' }}>{idx + 1} / {total}</span>
+          <span style={{ width: 34 }} />
+        </div>
+        <div style={{ height: 4, borderRadius: 99, background: 'var(--surface-2)', overflow: 'hidden' }}>
+          <div style={{ height: '100%', borderRadius: 99, background: 'var(--accent)', width: `${progressPct}%`, transition: 'width .35s ease' }} />
+        </div>
+      </div>
+
+      <div style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column', justifyContent: 'center', padding: '0 20px' }}>
+        <div style={{ background: 'var(--surface)', border: '1px solid var(--line)', borderRadius: 24, padding: '26px 22px', boxShadow: '0 1px 2px rgba(40,25,10,.04),0 14px 34px rgba(40,25,10,.06)', display: 'flex', flexDirection: 'column', gap: 6 }}>
+          <span className="en" style={kicker}>{KICKER[card.card_type]}</span>
+
+          {/* Prompt area varies by card type */}
+          {card.card_type === 'cloze' ? (
+            <span className="id" style={{ fontSize: 26, lineHeight: 1.25, fontWeight: 500, color: 'var(--ink)', marginTop: 6 }}>{card.cloze}</span>
+          ) : card.card_type === 'listen' ? (
+            <button onClick={() => speaker.speak(card.b)} className="en" style={{ marginTop: 8, alignSelf: 'flex-start', display: 'flex', alignItems: 'center', gap: 8, background: 'var(--surface-2)', border: 'none', borderRadius: 14, padding: '12px 16px', cursor: 'pointer', color: 'var(--ink)', fontSize: 15, fontWeight: 600 }}>
+              <SpeakerIcon /> Play audio
+            </button>
+          ) : (
+            <span className="en" style={{ fontSize: 36, lineHeight: 1.1, fontWeight: 600, color: 'var(--ink)', marginTop: 6 }}>{card.prompt_en}</span>
+          )}
+
+          <span className="en" style={{ fontSize: 13, color: 'var(--muted)' }}>
+            {card.card_type === 'cloze' || card.card_type === 'listen' ? card.prompt_en : card.pos}
+          </span>
+          {card.source_date && (
+            <span className="en" style={{ fontSize: 12, color: 'var(--faint)', marginTop: 8, display: 'flex', alignItems: 'center', gap: 6 }}>
+              from your message · {weekday(card.source_date)}
+            </span>
+          )}
+
+          {/* Input before reveal */}
+          {!revealed && !isProduce && (
+            <input
+              value={attempt}
+              onChange={(e) => setAttempt(e.target.value)}
+              placeholder="type your answer (optional)"
+              className="id"
+              style={{ marginTop: 16, width: '100%', border: 'none', borderBottom: '1.5px solid var(--line)', background: 'none', padding: '8px 2px', fontSize: 20, color: 'var(--ink)', outline: 'none' }}
+            />
+          )}
+          {!revealed && isProduce && (
+            <textarea
+              value={attempt}
+              onChange={(e) => setAttempt(e.target.value)}
+              placeholder="write the full sentence in Bahasa…"
+              rows={2}
+              className="id"
+              style={{ marginTop: 16, width: '100%', resize: 'none', border: '1px solid var(--line)', background: 'var(--surface-2)', borderRadius: 12, padding: '10px 12px', fontSize: 18, color: 'var(--ink)', outline: 'none' }}
+            />
+          )}
+
+          {/* Reveal block */}
+          {revealed && (
+            <div style={{ marginTop: 16, borderTop: '1px solid var(--line)', paddingTop: 16, display: 'flex', flexDirection: 'column', gap: 12, animation: 'rev .3s ease both' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+                <span className="id" style={{ fontSize: 32, lineHeight: 1, fontWeight: 500, color: 'var(--ink)' }}>{card.b}</span>
+                <button onClick={() => speaker.speak(card.b)} style={{ width: 34, height: 34, borderRadius: '50%', background: 'var(--surface-2)', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                  <SpeakerIcon size={16} big={false} />
+                </button>
+                {attemptMatch && !isProduce && (
+                  <span className="en" style={{ fontSize: 12, fontWeight: 600, color: 'var(--good)', display: 'flex', alignItems: 'center', gap: 4 }}>
+                    <CheckIcon size={13} strokeWidth={2.6} /> you got it
+                  </span>
+                )}
+              </div>
+
+              {isProduce && feedback && (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                  <span className="en" style={{ fontSize: 13, fontWeight: 600, color: feedback.correct ? 'var(--good)' : 'var(--accent)' }}>
+                    {feedback.correct ? '✓ Correct' : 'Not quite'}
+                  </span>
+                  <span className="en" style={{ fontSize: 13, color: 'var(--muted)', lineHeight: 1.45 }}>{feedback.feedback}</span>
+                </div>
+              )}
+
+              {(card.example_b || card.example_e) && (
+                <div style={{ background: 'var(--surface-2)', borderRadius: 12, padding: '11px 13px', display: 'flex', flexDirection: 'column', gap: 4 }}>
+                  {card.example_b && <span className="id" style={{ fontSize: 16, color: 'var(--ink)' }}>{card.example_b}</span>}
+                  {card.example_e && <span className="en" style={{ fontSize: 12.5, color: 'var(--muted)' }}>{card.example_e}</span>}
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* Bottom dock */}
+      <div style={{ flex: 'none', padding: '12px 18px 28px' }}>
+        {!revealed && !isProduce && (
+          <button onClick={() => setRevealed(true)} className="en" style={primaryBtn}>Reveal answer</button>
+        )}
+        {!revealed && isProduce && (
+          <button onClick={checkProduce} disabled={busy || !attempt.trim()} className="en" style={{ ...primaryBtn, opacity: busy || !attempt.trim() ? 0.55 : 1 }}>
+            {busy ? 'Checking…' : 'Check'}
+          </button>
+        )}
+        {revealed && isProduce && (
+          <button onClick={advance} className="en" style={primaryBtn}>Next</button>
+        )}
+        {revealed && !isProduce && (
+          <div style={{ display: 'flex', gap: 7 }}>
+            {GRADES.map((g) => (
+              <button key={g.key} onClick={() => grade(g.key)} disabled={busy} className="en" style={{ flex: 1, background: 'var(--surface)', border: '1px solid var(--line)', borderRadius: 14, padding: '11px 4px', cursor: 'pointer', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2 }}>
+                <span style={{ fontSize: 14, fontWeight: 600, color: 'var(--ink)' }}>{g.label}</span>
+                <span style={{ fontSize: 10.5, color: 'var(--faint)' }}>{g.sub}</span>
+              </button>
+            ))}
+          </div>
+        )}
+      </div>
     </div>
   );
 }
 
-interface CardProps {
-  card: ReviewCard;
-  revealed: boolean;
-  onReveal: () => void;
-}
+const kicker: React.CSSProperties = {
+  fontSize: 11,
+  letterSpacing: '.16em',
+  textTransform: 'uppercase',
+  color: 'var(--faint)',
+  fontWeight: 600,
+};
 
-function label(t: string): string {
-  return t === 'recall'
-    ? 'Recall'
-    : t === 'cloze'
-      ? 'Cloze'
-      : t === 'listen'
-        ? 'Listening'
-        : 'Free production';
-}
+const primaryBtn: React.CSSProperties = {
+  width: '100%',
+  height: 54,
+  background: 'var(--accent)',
+  color: '#fff',
+  border: 'none',
+  borderRadius: 17,
+  fontSize: 16,
+  fontWeight: 600,
+  cursor: 'pointer',
+};

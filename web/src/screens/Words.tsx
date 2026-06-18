@@ -1,175 +1,116 @@
-import { useEffect, useState } from 'react';
-import { api, type WordItem, type WordsResponse } from '../lib/api';
-import { speaker } from '../lib/audio';
+import { useState } from 'react';
+import { nextLabel, type DeckItem, type WordsResponse } from '../lib/api';
+import { SearchIcon } from '../lib/icons';
+import { StrengthMeter } from '../components/StrengthMeter';
 
-export function Words() {
-  const [data, setData] = useState<WordsResponse | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState('');
-  const [groupByRoot, setGroupByRoot] = useState(false);
-  const [expanded, setExpanded] = useState<string | null>(null);
-
-  async function load() {
-    setLoading(true);
-    setError('');
-    try {
-      setData(await api.words());
-    } catch (e) {
-      setError(e instanceof Error ? e.message : 'Could not load words');
-    } finally {
-      setLoading(false);
-    }
-  }
-
-  useEffect(() => {
-    load();
-  }, []);
-
-  if (loading) return <main className="screen"><p className="muted">Loading corpus…</p></main>;
-  if (error)
-    return (
-      <main className="screen">
-        <p className="error">{error}</p>
-        <button onClick={load}>Retry</button>
-      </main>
-    );
-  if (!data || data.total === 0)
-    return (
-      <main className="screen">
-        <div className="card">
-          <h3>No words yet</h3>
-          <p className="muted">Translate a few messages in Compose to start building your deck.</p>
-        </div>
-      </main>
-    );
-
-  return (
-    <main className="screen">
-      <div className="row">
-        <button className={!groupByRoot ? 'primary' : ''} onClick={() => setGroupByRoot(false)}>
-          By frequency
-        </button>
-        <button className={groupByRoot ? 'primary' : ''} onClick={() => setGroupByRoot(true)}>
-          By root family
-        </button>
-      </div>
-
-      <ItemGroup
-        title={`Words (${data.words.length})`}
-        items={data.words}
-        groupByRoot={groupByRoot}
-        expanded={expanded}
-        setExpanded={setExpanded}
-      />
-      <ItemGroup
-        title={`Phrases (${data.phrases.length})`}
-        items={data.phrases}
-        groupByRoot={groupByRoot}
-        expanded={expanded}
-        setExpanded={setExpanded}
-      />
-      {data.mastered.length > 0 && (
-        <ItemGroup
-          title={`Mastered (${data.mastered.length})`}
-          items={data.mastered}
-          groupByRoot={groupByRoot}
-          expanded={expanded}
-          setExpanded={setExpanded}
-        />
-      )}
-    </main>
-  );
+interface Props {
+  deck: WordsResponse | null;
+  loading: boolean;
+  error: string;
+  refresh: () => Promise<void> | void;
+  openSheet: (it: DeckItem) => void;
 }
 
-function ItemGroup({
-  title,
-  items,
-  groupByRoot,
-  expanded,
-  setExpanded,
-}: {
-  title: string;
-  items: WordItem[];
-  groupByRoot: boolean;
-  expanded: string | null;
-  setExpanded: (id: string | null) => void;
-}) {
-  if (items.length === 0) return null;
+type Filter = 'all' | 'due' | 'learning' | 'strong';
+const FILTERS: Array<{ key: Filter; label: string }> = [
+  { key: 'all', label: 'All' },
+  { key: 'due', label: 'Due' },
+  { key: 'learning', label: 'Learning' },
+  { key: 'strong', label: 'Strong' },
+];
 
-  if (groupByRoot) {
-    const families = new Map<string, WordItem[]>();
-    for (const it of items) {
-      const key = it.root || '(no root)';
-      families.set(key, [...(families.get(key) ?? []), it]);
-    }
-    const keys = [...families.keys()].sort();
-    return (
-      <div className="card">
-        <h3>{title}</h3>
-        {keys.map((root) => (
-          <div key={root} style={{ marginBottom: 10 }}>
-            <div className="section-title">root: {root}</div>
-            {families.get(root)!.map((it) => (
-              <ItemRow key={it.id} it={it} expanded={expanded} setExpanded={setExpanded} />
-            ))}
-          </div>
-        ))}
-      </div>
-    );
-  }
+const norm = (s: string) => s.toLowerCase().trim();
+
+export function Words({ deck, loading, error, refresh, openSheet }: Props) {
+  const [filter, setFilter] = useState<Filter>('all');
+  const [search, setSearch] = useState('');
+
+  const all = deck?.all ?? [];
+  const q = norm(search);
+
+  const list = all
+    .filter((d) => {
+      if (filter === 'due' && !d.is_due) return false;
+      if (filter === 'learning' && d.strength > 2) return false;
+      if (filter === 'strong' && d.strength < 4) return false;
+      if (q && !(norm(d.b).includes(q) || norm(d.e).includes(q))) return false;
+      return true;
+    })
+    .sort((a, b) => (a.is_due === b.is_due ? a.strength - b.strength : a.is_due ? -1 : 1));
 
   return (
-    <div className="card">
-      <h3>{title}</h3>
-      {items.map((it) => (
-        <ItemRow key={it.id} it={it} expanded={expanded} setExpanded={setExpanded} />
-      ))}
+    <div style={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
+      <div style={{ flex: 'none', padding: '54px 20px 6px', display: 'flex', flexDirection: 'column', gap: 12 }}>
+        <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between' }}>
+          <span className="id" style={{ fontSize: 30, fontWeight: 600, color: 'var(--ink)' }}>Words</span>
+          <span className="en" style={{ fontSize: 12, color: 'var(--faint)', whiteSpace: 'nowrap' }}>
+            {deck?.total ?? 0} saved · {deck?.due_count ?? 0} due
+          </span>
+        </div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 9, background: 'var(--surface-2)', borderRadius: 13, padding: '9px 12px' }}>
+          <SearchIcon />
+          <input
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder="Search your words"
+            className="en"
+            style={{ flex: 1, border: 'none', background: 'none', fontSize: 15, color: 'var(--ink)', outline: 'none' }}
+          />
+        </div>
+        <div style={{ display: 'flex', gap: 7 }}>
+          {FILTERS.map((f) => (
+            <button
+              key={f.key}
+              onClick={() => setFilter(f.key)}
+              className={`en chip${filter === f.key ? ' active' : ''}`}
+              style={{ border: 'none', borderRadius: 999, padding: '7px 14px', fontSize: 13, fontWeight: 600, cursor: 'pointer' }}
+            >
+              {f.label}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      <div className="noscroll" style={{ flex: 1, minHeight: 0, overflowY: 'auto', padding: '4px 0 8px' }}>
+        {loading && <Centered text="Loading your deck…" />}
+        {error && !loading && <Centered text={error} accent onRetry={refresh} />}
+        {!loading && !error && list.length === 0 && (
+          <Centered text={all.length === 0 ? 'No words yet — translate a message to start your deck.' : 'No matches.'} />
+        )}
+
+        {list.map((d) => (
+          <button
+            key={d.id}
+            onClick={() => openSheet(d)}
+            style={{ width: '100%', background: 'none', border: 'none', borderBottom: '1px solid var(--line)', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 12, padding: '14px 20px', textAlign: 'left' }}
+          >
+            <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 2 }}>
+              <span className="id" style={{ fontSize: 19, color: 'var(--ink)', fontWeight: 500 }}>{d.b}</span>
+              <span className="en" style={{ fontSize: 13, color: 'var(--muted)' }}>{d.e} · {d.pos}</span>
+            </div>
+            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 7 }}>
+              <StrengthMeter value={d.strength} />
+              {d.is_due ? (
+                <span className="en" style={{ fontSize: 11, fontWeight: 600, color: 'var(--accent)', whiteSpace: 'nowrap' }}>Due now</span>
+              ) : (
+                <span className="en" style={{ fontSize: 11, color: 'var(--faint)' }}>{nextLabel(d.due, d.is_due)}</span>
+              )}
+            </div>
+          </button>
+        ))}
+      </div>
     </div>
   );
 }
 
-function ItemRow({
-  it,
-  expanded,
-  setExpanded,
-}: {
-  it: WordItem;
-  expanded: string | null;
-  setExpanded: (id: string | null) => void;
-}) {
-  const open = expanded === it.id;
+function Centered({ text, accent, onRetry }: { text: string; accent?: boolean; onRetry?: () => void }) {
   return (
-    <div className="itemline" style={{ flexDirection: 'column', alignItems: 'stretch' }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 10 }}>
-        <div onClick={() => setExpanded(open ? null : it.id)} style={{ cursor: 'pointer', flex: 1 }}>
-          <span className="lemma">{it.lemma}</span>{' '}
-          <span className={`pill ${it.type}`}>{it.type}</span>
-          <div className="small muted">{it.gloss_en}</div>
-          {it.root && (
-            <div className="small muted">
-              root: {it.root}
-              {it.affixes.length > 0 && ` · ${it.affixes.join(', ')}`}
-            </div>
-          )}
-        </div>
-        <div style={{ textAlign: 'right' }}>
-          <div className="small muted">{it.use_count}×</div>
-          {speaker.supported && (
-            <button className="iconbtn" onClick={() => speaker.speak(it.lemma)}>
-              🔊
-            </button>
-          )}
-        </div>
-      </div>
-      {open && it.sources.length > 0 && (
-        <div style={{ marginTop: 8 }}>
-          <div className="section-title">From your messages</div>
-          {it.sources.slice(0, 5).map((s) => (
-            <p className="small muted" key={s.sentence_id} style={{ margin: '4px 0' }}>
-              “{s.lang === 'id' ? s.text : s.translation}”
-            </p>
-          ))}
-        </div>
+    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 10, padding: '60px 30px', textAlign: 'center' }}>
+      <span className="en" style={{ fontSize: 14, color: accent ? 'var(--accent)' : 'var(--muted)' }}>{text}</span>
+      {onRetry && (
+        <button onClick={onRetry} className="en" style={{ background: 'var(--surface-2)', border: '1px solid var(--line)', borderRadius: 12, padding: '8px 16px', cursor: 'pointer', color: 'var(--ink)' }}>
+          Retry
+        </button>
       )}
     </div>
   );

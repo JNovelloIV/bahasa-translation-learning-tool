@@ -16,7 +16,7 @@ async function req<T>(path: string, init?: RequestInit): Promise<T> {
   return data as T;
 }
 
-// ---- Types mirroring the Worker contract ----
+// ---- Translate ----
 
 export interface GlossPair {
   src: string;
@@ -41,24 +41,33 @@ export interface TranslateResponse {
   harvested: number;
 }
 
+// ---- Review ----
+
 export type CardType = 'recall' | 'cloze' | 'listen' | 'produce';
 export interface ReviewCard {
   item_id: string;
   card_type: CardType;
+  b: string; // Bahasa answer
   lemma: string;
   surface: string | null;
+  prompt_en: string;
   gloss_en: string;
+  pos: string;
   type: 'word' | 'phrase';
   root: string | null;
   affixes: string[];
   use_count: number;
+  strength: number;
   due: string | null;
   state: string;
   cloze: string | null;
-  example: string | null;
+  example_b: string | null;
+  example_e: string | null;
+  source_date: string | null;
 }
 export interface QueueResponse {
   count: number;
+  due_total: number;
   cards: ReviewCard[];
 }
 
@@ -71,6 +80,8 @@ export interface ProduceResponse {
   state: string;
 }
 
+// ---- Words (the deck) ----
+
 export interface SourceSentence {
   sentence_id: string;
   text: string;
@@ -78,44 +89,35 @@ export interface SourceSentence {
   lang: 'en' | 'id';
   created_at: string;
 }
-export interface WordItem {
+export interface DeckItem {
   id: string;
-  lemma: string;
-  surface: string | null;
+  b: string; // Bahasa (lemma)
+  e: string; // English (gloss)
+  pos: string;
   type: 'word' | 'phrase';
-  gloss_en: string;
   root: string | null;
   affixes: string[];
   use_count: number;
-  first_seen: string;
-  last_used: string;
+  strength: number;
+  is_due: boolean;
   due: string | null;
   state: string;
   graduated: boolean;
+  first_seen: string;
+  last_used: string;
+  example_b: string | null;
+  example_e: string | null;
+  source_msg: string | null;
+  source_date: string | null;
   sources: SourceSentence[];
 }
 export interface WordsResponse {
   total: number;
-  words: WordItem[];
-  phrases: WordItem[];
-  mastered: WordItem[];
-}
-
-export interface StatsResponse {
-  total: number;
-  mastered: number;
   due_count: number;
-  reviews_graded: number;
-  retention: number | null;
-  about_to_forget_count: number;
-  about_to_forget: Array<{
-    id: string;
-    lemma: string;
-    gloss_en: string;
-    use_count: number;
-    retrievability: number;
-    due: string | null;
-  }>;
+  all: DeckItem[];
+  words: DeckItem[];
+  phrases: DeckItem[];
+  mastered: DeckItem[];
 }
 
 export const api = {
@@ -133,5 +135,30 @@ export const api = {
       body: JSON.stringify({ item_id, attempt, target_meaning }),
     }),
   words: () => req<WordsResponse>('/words'),
-  stats: () => req<StatsResponse>('/stats'),
 };
+
+// ---- small display helpers ----
+
+const WEEKDAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+
+/** "from your message · Tue" style weekday from an ISO date. */
+export function weekday(iso: string | null): string {
+  if (!iso) return '';
+  const d = new Date(iso);
+  if (isNaN(d.getTime())) return '';
+  return WEEKDAYS[d.getDay()];
+}
+
+/** Relative due label like "Due now" / "in 3 days" / "in 8 hours". */
+export function nextLabel(due: string | null, isDue: boolean): string {
+  if (isDue) return 'Due now';
+  if (!due) return '';
+  const ms = new Date(due).getTime() - Date.now();
+  if (ms <= 0) return 'Due now';
+  const hours = Math.round(ms / 3_600_000);
+  if (hours < 24) return `in ${hours} hour${hours === 1 ? '' : 's'}`;
+  const days = Math.round(hours / 24);
+  if (days < 14) return `in ${days} day${days === 1 ? '' : 's'}`;
+  const weeks = Math.round(days / 7);
+  return `in ${weeks} week${weeks === 1 ? '' : 's'}`;
+}

@@ -21,7 +21,9 @@ Cloudflare D1 (SQLite)         scheduling = ts-fsrs (no hand-rolled SR math)
 ```
 
 - `worker/` — the Hono Worker, D1 migrations, FSRS scheduler, model contract.
-- `web/` — the React + Vite frontend (a minimal functional skin; final visual design pending).
+- `web/` — the React + Vite frontend, built pixel-faithfully from the Claude Design
+  handoff (warm-paper theme, Newsreader serif for Bahasa / Hanken Grotesk sans for
+  English, light + dark, three tabs: Compose · Review · Words).
 
 ### The model contract
 
@@ -166,5 +168,12 @@ So only you (and later your team) can use it, and so each user gets their own de
   from the Review queue.
 - **Audio** is isolated behind `web/src/lib/audio.ts` (Web Speech API, `id-ID`, with iOS Safari
   handling) so a cloud TTS can swap in later.
-- The current UI is a deliberately plain functional skin. The Claude Design frames (mobile layouts,
-  dark-mode spec) did not arrive in the brief; once provided, the UI will be reskinned to match.
+- **UI** follows the Claude Design handoff: language is coded by typeface everywhere (Bahasa = serif,
+  English = sans), the message→memory loop is made visible ("N added to your deck", source lines,
+  the Review badge), and memory strength shows as quiet 5-segment bars. Per your direction, the
+  Review screen keeps the design's visual language while adding card-type variety (productive recall,
+  cloze, listening, free-production) on top of the prototype's single recall card.
+- **Strength meter (1–5)** and **due/next-review labels** are derived from the FSRS card stability —
+  no separate "strength" math.
+- There is no separate Stats tab (the design has three tabs); the `GET /stats` endpoint still exists
+  and powers the due counts / "about to forget" data if you want a dashboard later.
