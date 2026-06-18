@@ -1,5 +1,5 @@
-import { useState } from 'react';
-import { api, LANG_NAME, type Profile } from '../lib/api';
+import { useEffect, useState } from 'react';
+import { api, LANG_NAME, type Profile, type UsageResponse } from '../lib/api';
 
 interface Props {
   profile: Profile;
@@ -7,9 +7,16 @@ interface Props {
   onLoggedOut: () => void;
 }
 
+const usd = (n: number) => `$${n.toFixed(n < 1 ? 4 : 2)}`;
+
 // Bottom sheet for account controls (new-feature surface, reused by later phases).
 export function Settings({ profile, onClose, onLoggedOut }: Props) {
   const [busy, setBusy] = useState(false);
+  const [usage, setUsage] = useState<UsageResponse | null>(null);
+
+  useEffect(() => {
+    api.usage().then(setUsage).catch(() => {});
+  }, []);
 
   async function signOut() {
     setBusy(true);
@@ -38,6 +45,29 @@ export function Settings({ profile, onClose, onLoggedOut }: Props) {
           <span className="en" style={{ fontSize: 13, color: 'var(--muted)' }}>
             Learning {LANG_NAME[profile.target_lang]} · from {LANG_NAME[profile.native_lang]}
           </span>
+        </div>
+
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 8, borderTop: '1px solid var(--line)', paddingTop: 16 }}>
+          <span className="en" style={{ fontSize: 11, letterSpacing: '.1em', textTransform: 'uppercase', color: 'var(--faint)', fontWeight: 600 }}>
+            Spend
+          </span>
+          <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+            <span className="en" style={{ fontSize: 14, color: 'var(--muted)' }}>Today</span>
+            <span className="en" style={{ fontSize: 14, color: 'var(--ink)', fontWeight: 600 }}>
+              {usage ? usd(usage.today.cost_usd) : '—'}
+            </span>
+          </div>
+          <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+            <span className="en" style={{ fontSize: 14, color: 'var(--muted)' }}>This month</span>
+            <span className="en" style={{ fontSize: 14, color: 'var(--ink)', fontWeight: 600 }}>
+              {usage ? usd(usage.month.cost_usd) : '—'}
+            </span>
+          </div>
+          {usage && (
+            <span className="en" style={{ fontSize: 11, color: 'var(--faint)' }}>
+              {usage.month.calls} calls this month · {(usage.month.input_tokens + usage.month.output_tokens).toLocaleString()} tokens
+            </span>
+          )}
         </div>
 
         <button

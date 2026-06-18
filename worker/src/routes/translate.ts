@@ -5,6 +5,7 @@ import { callModelJSON } from '../lib/anthropic';
 import { validateTranslation } from '../lib/validate';
 import { buildTranslationSystemPrompt } from '../lib/prompts';
 import { harvestTranslation } from '../lib/harvest';
+import { logUsage } from '../lib/usage';
 
 const app = new Hono<{ Bindings: Env }>();
 
@@ -34,6 +35,7 @@ app.post('/', async (c) => {
         messages: [{ role: 'user', content: text }],
         maxTokens: 1500,
         temperature: 0,
+        onUsage: (u) => logUsage(c.env, user.id, 'translate', c.env.MODEL_TRANSLATE, u),
       },
       validateTranslation,
     );

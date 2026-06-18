@@ -137,8 +137,20 @@ export interface Profile {
   target_lang: LangCode;
 }
 
+export interface UsageTotals {
+  calls: number;
+  input_tokens: number;
+  output_tokens: number;
+  cost_usd: number;
+}
+export interface UsageResponse {
+  today: UsageTotals;
+  month: UsageTotals;
+}
+
 export const api = {
   me: () => req<Profile>('/me'),
+  usage: () => req<UsageResponse>('/usage'),
   login: (display_name: string, pin: string, turnstile_token?: string) =>
     req<{ ok: boolean; profile: Profile }>('/auth/login', {
       method: 'POST',

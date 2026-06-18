@@ -14,6 +14,7 @@ export interface Env {
   ALLOW_DEV_AUTH: string; // "true" only in local dev (.dev.vars); never in prod
   SESSION_SAMESITE: string; // "Lax" (same-site deploy) or "None" (cross-site)
   TURNSTILE_SECRET?: string; // optional; when set, /login requires a Turnstile token
+  MODEL_RATES_JSON?: string; // optional override of per-model USD/1M-token rates
 }
 
 // Per-request context vars set by middleware.

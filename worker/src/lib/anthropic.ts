@@ -18,10 +18,17 @@ interface CallOptions {
   messages: AnthropicMessage[];
   maxTokens?: number;
   temperature?: number;
+  // Called once on success with the summed token usage across attempts.
+  onUsage?: (u: TokenUsage) => Promise<void> | void;
 }
 
-/** Raw single call to the Anthropic Messages API. Returns the text content. */
-async function rawCall(env: Env, opts: CallOptions): Promise<string> {
+export interface TokenUsage {
+  input_tokens: number;
+  output_tokens: number;
+}
+
+/** Raw single call to the Anthropic Messages API. Returns text + token usage. */
+async function rawCall(env: Env, opts: CallOptions): Promise<{ text: string; usage: TokenUsage }> {
   const res = await fetch(ANTHROPIC_URL, {
     method: 'POST',
     headers: {
@@ -45,6 +52,7 @@ async function rawCall(env: Env, opts: CallOptions): Promise<string> {
 
   const data = (await res.json()) as {
     content?: Array<{ type: string; text?: string }>;
+    usage?: { input_tokens?: number; output_tokens?: number };
   };
   const text = (data.content ?? [])
     .filter((b) => b.type === 'text')
@@ -53,7 +61,13 @@ async function rawCall(env: Env, opts: CallOptions): Promise<string> {
     .trim();
 
   if (!text) throw new Error('Anthropic API returned empty content');
-  return text;
+  return {
+    text,
+    usage: {
+      input_tokens: data.usage?.input_tokens ?? 0,
+      output_tokens: data.usage?.output_tokens ?? 0,
+    },
+  };
 }
 
 /** Remove ```json … ``` fences and any stray prose around a JSON object. */
@@ -80,6 +94,7 @@ export async function callModelJSON<T>(
   validate: (parsed: unknown) => T,
 ): Promise<T> {
   let lastErr: unknown;
+  const total: TokenUsage = { input_tokens: 0, output_tokens: 0 };
 
   for (let attempt = 0; attempt < 2; attempt++) {
     const messages =
@@ -96,12 +111,25 @@ export async function callModelJSON<T>(
 
     try {
       const raw = await rawCall(env, { ...opts, messages });
-      const jsonText = stripToJson(raw);
+      total.input_tokens += raw.usage.input_tokens;
+      total.output_tokens += raw.usage.output_tokens;
+      const jsonText = stripToJson(raw.text);
       const parsed = JSON.parse(jsonText);
-      return validate(parsed);
+      const result = validate(parsed);
+      if (opts.onUsage) await opts.onUsage(total);
+      return result;
     } catch (err) {
       lastErr = err;
-      // fall through to retry
+      // tokens from a successful-but-invalid response are already in `total`; retry
+    }
+  }
+
+  // Even on total failure, attribute the tokens we burned (best-effort).
+  if (opts.onUsage && (total.input_tokens || total.output_tokens)) {
+    try {
+      await opts.onUsage(total);
+    } catch {
+      /* ignore logging errors */
     }
   }
 

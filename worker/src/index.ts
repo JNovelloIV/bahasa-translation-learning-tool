@@ -10,6 +10,7 @@ import translate from './routes/translate';
 import review from './routes/review';
 import words from './routes/words';
 import stats from './routes/stats';
+import usage from './routes/usage';
 
 const app = new Hono<{ Bindings: Env; Variables: Variables }>();
 
@@ -53,6 +54,7 @@ app.route('/translate', translate);
 app.route('/review', review);
 app.route('/words', words);
 app.route('/stats', stats);
+app.route('/usage', usage);
 
 app.notFound((c) => c.json({ error: 'Not found' }, 404));
 app.onError((err, c) => {

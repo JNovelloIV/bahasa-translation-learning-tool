@@ -6,6 +6,7 @@ import { callModelJSON } from '../lib/anthropic';
 import { validateProduce } from '../lib/validate';
 import { buildProduceSystemPrompt, buildProduceUserPrompt } from '../lib/prompts';
 import { sideInLang } from '../lib/derive';
+import { logUsage } from '../lib/usage';
 
 const app = new Hono<{ Bindings: Env }>();
 
@@ -218,6 +219,7 @@ app.post('/produce', async (c) => {
         ],
         maxTokens: 500,
         temperature: 0,
+        onUsage: (u) => logUsage(c.env, user.id, 'produce', c.env.MODEL_GRADE, u),
       },
       validateProduce,
     );
