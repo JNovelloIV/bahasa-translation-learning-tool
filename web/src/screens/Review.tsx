@@ -13,7 +13,9 @@ interface Props {
   goCompose: () => void;
 }
 
-type Stage = 'hero' | 'active' | 'done';
+type Stage = 'hero' | 'active' | 'audio' | 'done';
+
+const CUE_GAP_MS = 4500; // pause for the learner to say it aloud before the answer
 
 const GRADES = [
   { key: 'again', label: 'Again', sub: '<1m' },
@@ -46,6 +48,8 @@ export function Review({ deck, dueCount, refresh, refreshActivity, toast, profil
   const [doneCount, setDoneCount] = useState(0);
   const [busy, setBusy] = useState(false);
   const [feedback, setFeedback] = useState<{ correct: boolean; corrected: string; feedback: string } | null>(null);
+  const [audioReady, setAudioReady] = useState(false); // answer has been spoken
+  const [playing, setPlaying] = useState(false);
 
   const card = cards[idx];
   const total = cards.length;
@@ -114,6 +118,73 @@ export function Review({ deck, dueCount, refresh, refreshActivity, toast, profil
     }
   }
 
+  // ---------- HANDS-FREE AUDIO DRILL ----------
+  // Must be kicked off by a user gesture (iOS). We chain: cue (native) → pause →
+  // answer (target), then enable tap grading and auto-advance.
+  function playIndex(list: ReviewCard[], i: number) {
+    const c = list[i];
+    if (!c) return;
+    setAudioReady(false);
+    setPlaying(true);
+    speaker
+      .speakSequence([
+        { text: c.prompt, lang: N, gapMs: CUE_GAP_MS },
+        { text: c.b, lang: T },
+      ])
+      .finally(() => {
+        setPlaying(false);
+        setAudioReady(true);
+      });
+  }
+
+  async function beginAudio() {
+    setBusy(true);
+    try {
+      const r = await api.queue();
+      if (!r.cards.length) {
+        toast('Nothing due right now');
+        return;
+      }
+      setCards(r.cards);
+      setIdx(0);
+      setDoneCount(0);
+      setStage('audio');
+      playIndex(r.cards, 0); // within this tap = a valid gesture to start TTS
+    } catch {
+      toast('Could not load review');
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function gradeAudio(key: string) {
+    if (!card || busy) return;
+    setBusy(true);
+    setDoneCount((n) => n + 1);
+    try {
+      await api.grade(card.item_id, key, 'listen');
+      refreshActivity();
+    } catch {
+      toast('Grade failed');
+    } finally {
+      setBusy(false);
+      const next = idx + 1;
+      if (next >= total) {
+        speaker.cancel();
+        setStage('done');
+        refresh();
+      } else {
+        setIdx(next);
+        playIndex(cards, next); // grade tap is the gesture for the next utterance
+      }
+    }
+  }
+
+  function stopAudio() {
+    speaker.cancel();
+    setPlaying(false);
+  }
+
   // ---------- HERO ----------
   if (stage === 'hero') {
     const preview = (deck?.all ?? []).filter((d) => d.is_due).slice(0, 4);
@@ -149,6 +220,16 @@ export function Review({ deck, dueCount, refresh, refreshActivity, toast, profil
           <button onClick={begin} disabled={busy || dueCount === 0} className="en" style={{ ...primaryBtn, opacity: busy || dueCount === 0 ? 0.55 : 1 }}>
             {busy ? 'Loading…' : 'Begin review'}
           </button>
+          {speaker.supported && (
+            <button
+              onClick={beginAudio}
+              disabled={busy || dueCount === 0}
+              className="en"
+              style={{ width: '100%', height: 48, marginTop: 10, background: 'var(--surface-2)', color: 'var(--ink)', border: '1px solid var(--line)', borderRadius: 16, fontSize: 15, fontWeight: 600, cursor: 'pointer', opacity: busy || dueCount === 0 ? 0.55 : 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}
+            >
+              <SpeakerIcon size={18} /> Hands-free audio
+            </button>
+          )}
           <p className="en" style={{ textAlign: 'center', fontSize: 12, color: 'var(--faint)', margin: '11px 0 0' }}>
             Recall first — the answer comes after you try.
           </p>
@@ -182,6 +263,65 @@ export function Review({ deck, dueCount, refresh, refreshActivity, toast, profil
           <button onClick={() => { setStage('hero'); goCompose(); }} className="en" style={{ ...primaryBtn, background: 'var(--ink)', color: 'var(--bg)' }}>
             Back to messages
           </button>
+        </div>
+      </div>
+    );
+  }
+
+  // ---------- HANDS-FREE AUDIO ----------
+  if (stage === 'audio') {
+    if (!card) return null;
+    return (
+      <div style={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
+        <div style={{ flex: 'none', padding: '50px 20px 8px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+          <button onClick={() => { stopAudio(); setStage('hero'); }} style={{ width: 34, height: 34, borderRadius: '50%', background: 'var(--surface-2)', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+            <CloseIcon />
+          </button>
+          <span className="en" style={{ fontSize: 13, fontWeight: 600, color: 'var(--muted)' }}>{idx + 1} / {total}</span>
+          <span style={{ width: 34 }} />
+        </div>
+
+        <div style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 18, padding: '0 24px', textAlign: 'center' }}>
+          <span className="en" style={kicker}>Hands-free · say it aloud</span>
+
+          {/* Big play / replay control */}
+          <button
+            onClick={() => (playing ? stopAudio() : playIndex(cards, idx))}
+            aria-label={playing ? 'Stop' : 'Play'}
+            style={{ width: 96, height: 96, borderRadius: '50%', background: 'var(--accent)', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+          >
+            {playing ? (
+              <svg width="34" height="34" viewBox="0 0 24 24" fill="#fff"><rect x="6" y="5" width="4" height="14" rx="1" /><rect x="14" y="5" width="4" height="14" rx="1" /></svg>
+            ) : (
+              <svg width="38" height="38" viewBox="0 0 24 24" fill="#fff"><path d="M8 5v14l11-7z" /></svg>
+            )}
+          </button>
+
+          {/* Answer stays hidden until spoken (eyes-up) */}
+          {audioReady ? (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 4, animation: 'rev .3s ease both' }}>
+              <span className={T} style={{ fontSize: 34, fontWeight: 500, color: 'var(--ink)' }}>{card.b}</span>
+              <span className={N} style={{ fontSize: 14, color: 'var(--muted)' }}>{card.prompt}</span>
+            </div>
+          ) : (
+            <span className="en" style={{ fontSize: 14, color: 'var(--faint)' }}>
+              {playing ? 'Listen, then say it aloud…' : 'Tap play to hear the cue'}
+            </span>
+          )}
+        </div>
+
+        <div style={{ flex: 'none', padding: '12px 18px 28px', display: 'flex', flexDirection: 'column', gap: 10 }}>
+          <button onClick={() => playIndex(cards, idx)} className="en" style={{ width: '100%', height: 42, background: 'var(--surface-2)', color: 'var(--muted)', border: '1px solid var(--line)', borderRadius: 12, fontSize: 13, fontWeight: 600, cursor: 'pointer' }}>
+            Replay
+          </button>
+          <div style={{ display: 'flex', gap: 7 }}>
+            {GRADES.map((g) => (
+              <button key={g.key} onClick={() => gradeAudio(g.key)} disabled={busy} className="en" style={{ flex: 1, background: 'var(--surface)', border: '1px solid var(--line)', borderRadius: 14, padding: '14px 4px', cursor: 'pointer', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2 }}>
+                <span style={{ fontSize: 15, fontWeight: 600, color: 'var(--ink)' }}>{g.label}</span>
+                <span style={{ fontSize: 10.5, color: 'var(--faint)' }}>{g.sub}</span>
+              </button>
+            ))}
+          </div>
         </div>
       </div>
     );
