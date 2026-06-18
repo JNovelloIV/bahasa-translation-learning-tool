@@ -7,6 +7,7 @@ interface Props {
   deck: WordsResponse | null;
   dueCount: number;
   refresh: () => Promise<void> | void;
+  refreshActivity: () => Promise<void> | void;
   toast: (t: string) => void;
   profile: Profile;
   goCompose: () => void;
@@ -23,7 +24,7 @@ const GRADES = [
 
 const norm = (s: string) => s.toLowerCase().replace(/[^a-z0-9\s']/g, '').replace(/\s+/g, ' ').trim();
 
-export function Review({ deck, dueCount, refresh, toast, profile, goCompose }: Props) {
+export function Review({ deck, dueCount, refresh, refreshActivity, toast, profile, goCompose }: Props) {
   const N = profile.native_lang; // cue typeface/language
   const T = profile.target_lang; // answer typeface/language
   const targetName = LANG_NAME[T];
@@ -88,6 +89,7 @@ export function Review({ deck, dueCount, refresh, toast, profile, goCompose }: P
     setDoneCount((n) => n + 1);
     try {
       await api.grade(card.item_id, key, card.card_type);
+      refreshActivity();
     } catch {
       toast('Grade failed');
     } finally {
@@ -104,6 +106,7 @@ export function Review({ deck, dueCount, refresh, toast, profile, goCompose }: P
       setFeedback({ correct: r.correct, corrected: r.corrected, feedback: r.feedback });
       setRevealed(true);
       setDoneCount((n) => n + 1);
+      refreshActivity();
     } catch {
       toast('Could not check');
     } finally {

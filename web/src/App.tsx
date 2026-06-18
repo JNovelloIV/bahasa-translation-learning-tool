@@ -2,6 +2,8 @@ import { useCallback, useRef, useState } from 'react';
 import { useDarkMode } from './lib/theme';
 import { useDeck } from './lib/useDeck';
 import { useProfile } from './lib/useProfile';
+import { useHeartbeat } from './lib/useHeartbeat';
+import { useActivity } from './lib/useActivity';
 import type { DeckItem } from './lib/api';
 import { Compose } from './screens/Compose';
 import { Review } from './screens/Review';
@@ -17,6 +19,8 @@ export function App() {
   const [tab, setTab] = useState<Tab>('compose');
   const { profile, authed, loaded, reload } = useProfile();
   const { deck, dueCount, loading, error, refresh } = useDeck(authed);
+  const { activity, refresh: refreshActivity } = useActivity(authed);
+  useHeartbeat(authed);
 
   const [sheetItem, setSheetItem] = useState<DeckItem | null>(null);
   const [settingsOpen, setSettingsOpen] = useState(false);
@@ -69,6 +73,7 @@ export function App() {
             refresh={refresh}
             toast={toast}
             profile={profile}
+            activity={activity}
             onSettings={() => setSettingsOpen(true)}
             goReview={() => setTab('review')}
           />
@@ -78,6 +83,7 @@ export function App() {
             deck={deck}
             dueCount={dueCount}
             refresh={refresh}
+            refreshActivity={refreshActivity}
             toast={toast}
             profile={profile}
             goCompose={() => setTab('compose')}

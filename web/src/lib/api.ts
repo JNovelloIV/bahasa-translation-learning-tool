@@ -148,9 +148,22 @@ export interface UsageResponse {
   month: UsageTotals;
 }
 
+export interface ActivitySummary {
+  today: { active_seconds: number; reps: number };
+  yesterday: { active_seconds: number; reps: number };
+  streak: number;
+  best: number;
+  floor_seconds: number;
+  reps_floor: number;
+  met_today: boolean;
+}
+
 export const api = {
   me: () => req<Profile>('/me'),
   usage: () => req<UsageResponse>('/usage'),
+  activity: () => req<ActivitySummary>('/activity'),
+  ping: (seconds: number) =>
+    req<{ ok: boolean }>('/activity/ping', { method: 'POST', body: JSON.stringify({ seconds }) }),
   login: (display_name: string, pin: string, turnstile_token?: string) =>
     req<{ ok: boolean; profile: Profile }>('/auth/login', {
       method: 'POST',

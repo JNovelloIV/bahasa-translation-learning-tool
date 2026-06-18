@@ -7,6 +7,7 @@ import { validateProduce } from '../lib/validate';
 import { buildProduceSystemPrompt, buildProduceUserPrompt } from '../lib/prompts';
 import { sideInLang } from '../lib/derive';
 import { logUsage } from '../lib/usage';
+import { bumpReps } from '../lib/activity';
 
 const app = new Hono<{ Bindings: Env }>();
 
@@ -174,6 +175,8 @@ app.post('/grade', async (c) => {
     .bind(itemId, rating, mode, new Date().toISOString())
     .run();
 
+  await bumpReps(c.env, userId);
+
   return c.json({ ok: true, due: sched.due, state: sched.state });
 });
 
@@ -241,6 +244,8 @@ app.post('/produce', async (c) => {
   )
     .bind(itemId, graded.rating, new Date().toISOString())
     .run();
+
+  await bumpReps(c.env, user.id);
 
   return c.json({ ...graded, due: sched.due, state: sched.state });
 });

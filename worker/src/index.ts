@@ -11,6 +11,7 @@ import review from './routes/review';
 import words from './routes/words';
 import stats from './routes/stats';
 import usage from './routes/usage';
+import activity from './routes/activity';
 
 const app = new Hono<{ Bindings: Env; Variables: Variables }>();
 
@@ -55,6 +56,7 @@ app.route('/review', review);
 app.route('/words', words);
 app.route('/stats', stats);
 app.route('/usage', usage);
+app.route('/activity', activity);
 
 app.notFound((c) => c.json({ error: 'Not found' }, 404));
 app.onError((err, c) => {

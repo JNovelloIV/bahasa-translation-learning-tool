@@ -1,7 +1,8 @@
 import { useState } from 'react';
-import { api, LANG_NAME, type LangCode, type Profile, type TranslateResponse, type WordsResponse } from '../lib/api';
+import { api, LANG_NAME, type ActivitySummary, type LangCode, type Profile, type TranslateResponse, type WordsResponse } from '../lib/api';
 import { speaker } from '../lib/audio';
 import { MoonIcon, SunIcon, CopyIcon, SpeakerIcon, ShareIcon, CheckIcon, GearIcon } from '../lib/icons';
+import { ConsistencyCard } from '../components/ConsistencyCard';
 
 interface Props {
   deck: WordsResponse | null;
@@ -11,6 +12,7 @@ interface Props {
   refresh: () => Promise<void> | void;
   toast: (t: string) => void;
   profile: Profile;
+  activity: ActivitySummary | null;
   onSettings: () => void;
   goReview: () => void;
 }
@@ -76,7 +78,7 @@ const QUICK_PHRASES = [
   'Tolong kirim laporannya hari ini',
 ];
 
-export function Compose({ dueCount, dark, toggleDark, refresh, toast, profile, onSettings, goReview }: Props) {
+export function Compose({ dueCount, dark, toggleDark, refresh, toast, profile, activity, onSettings, goReview }: Props) {
   const [input, setInput] = useState('');
   const [result, setResult] = useState<Result | null>(null);
   const [loading, setLoading] = useState(false);
@@ -210,6 +212,8 @@ export function Compose({ dueCount, dark, toggleDark, refresh, toast, profile, o
         className="noscroll"
         style={{ flex: 1, minHeight: 0, overflowY: 'auto', padding: '6px 16px 10px', display: 'flex', flexDirection: 'column', gap: 13 }}
       >
+        {!result && <ConsistencyCard activity={activity} />}
+
         {error && (
           <div
             style={{
