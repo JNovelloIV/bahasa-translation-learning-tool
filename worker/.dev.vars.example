@@ -1,3 +1,17 @@
-# Local-only secrets for `wrangler dev`. Copy to `.dev.vars` (gitignored) and fill in.
-# In production this is set with:  wrangler secret put ANTHROPIC_API_KEY
+# Local-only secrets/flags for `wrangler dev`. Copy to `.dev.vars` (gitignored) and fill in.
+# In production these are set with `wrangler secret put <NAME>` (and vars in wrangler.toml).
+
 ANTHROPIC_API_KEY="sk-ant-..."
+
+# Signs session JWTs. Any long random string is fine for local dev.
+SESSION_SECRET="dev-session-secret-change-me"
+
+# Guards owner-only provisioning (POST /admin/users). Used as: Authorization: Bearer <this>
+ADMIN_TOKEN="dev-admin-token-change-me"
+
+# Local-dev auth bypass so you don't need to log in while developing.
+# NEVER set this in production (wrangler.toml keeps it "false").
+ALLOW_DEV_AUTH="true"
+
+# Optional: enable Cloudflare Turnstile on login by setting its secret key.
+# TURNSTILE_SECRET="0x..."

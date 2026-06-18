@@ -1,33 +1,31 @@
-import { useEffect, useState } from 'react';
-import { api, type Profile } from './api';
+import { useCallback, useEffect, useState } from 'react';
+import { api, ApiError, type Profile } from './api';
 
-// The user's profile drives language coding (typeface) and TTS language across
-// every screen. Falls back to owner defaults (native en / target id) if it can't
-// load, so the UI never hard-blocks on this.
+const OWNER_DEFAULT: Profile = { id: 'me', display_name: 'you', native_lang: 'en', target_lang: 'id' };
+
+// The profile drives language coding (typeface) + TTS, and tells us whether the
+// user is authenticated (a 401 from /me means show the login screen).
 export function useProfile() {
-  const [profile, setProfile] = useState<Profile>({
-    id: 'me',
-    display_name: 'you',
-    native_lang: 'en',
-    target_lang: 'id',
-  });
+  const [profile, setProfile] = useState<Profile>(OWNER_DEFAULT);
+  const [authed, setAuthed] = useState(false);
   const [loaded, setLoaded] = useState(false);
 
-  useEffect(() => {
-    let alive = true;
-    api
-      .me()
-      .then((p) => {
-        if (alive) setProfile(p);
-      })
-      .catch(() => {})
-      .finally(() => {
-        if (alive) setLoaded(true);
-      });
-    return () => {
-      alive = false;
-    };
+  const reload = useCallback(async () => {
+    try {
+      const p = await api.me();
+      setProfile(p);
+      setAuthed(true);
+    } catch (e) {
+      if (e instanceof ApiError && e.status === 401) setAuthed(false);
+      // other errors: leave authed as-is (transient); UI shows login if never authed
+    } finally {
+      setLoaded(true);
+    }
   }, []);
 
-  return { profile, loaded };
+  useEffect(() => {
+    reload();
+  }, [reload]);
+
+  return { profile, authed, loaded, reload };
 }

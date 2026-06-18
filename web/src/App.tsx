@@ -7,16 +7,19 @@ import { Compose } from './screens/Compose';
 import { Review } from './screens/Review';
 import { Words } from './screens/Words';
 import { WordSheet } from './screens/WordSheet';
+import { Login } from './screens/Login';
+import { Settings } from './screens/Settings';
 import { Toast } from './components/Toast';
 import { TabBar, type Tab } from './components/TabBar';
 
 export function App() {
   const [dark, toggleDark] = useDarkMode();
   const [tab, setTab] = useState<Tab>('compose');
-  const { deck, dueCount, loading, error, refresh } = useDeck();
-  const { profile } = useProfile();
+  const { profile, authed, loaded, reload } = useProfile();
+  const { deck, dueCount, loading, error, refresh } = useDeck(authed);
 
   const [sheetItem, setSheetItem] = useState<DeckItem | null>(null);
+  const [settingsOpen, setSettingsOpen] = useState(false);
   const [toastText, setToastText] = useState('');
   const [toastVisible, setToastVisible] = useState(false);
   const toastTimer = useRef<ReturnType<typeof setTimeout>>();
@@ -40,6 +43,20 @@ export function App() {
     flexDirection: 'column',
   };
 
+  // Splash while we check the session.
+  if (!loaded) {
+    return <div className={`sehari ${dark ? 'dark' : ''}`} style={frame} />;
+  }
+
+  // Auth gate.
+  if (!authed) {
+    return (
+      <div className={`sehari ${dark ? 'dark' : ''}`} style={frame}>
+        <Login dark={dark} toggleDark={toggleDark} onLoggedIn={() => reload()} />
+      </div>
+    );
+  }
+
   return (
     <div className={`sehari ${dark ? 'dark' : ''}`} style={frame}>
       <div style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' }}>
@@ -52,6 +69,7 @@ export function App() {
             refresh={refresh}
             toast={toast}
             profile={profile}
+            onSettings={() => setSettingsOpen(true)}
             goReview={() => setTab('review')}
           />
         )}
@@ -89,6 +107,17 @@ export function App() {
             setTab('review');
           }}
           toast={toast}
+        />
+      )}
+
+      {settingsOpen && (
+        <Settings
+          profile={profile}
+          onClose={() => setSettingsOpen(false)}
+          onLoggedOut={() => {
+            setSettingsOpen(false);
+            reload();
+          }}
         />
       )}
 

@@ -8,6 +8,17 @@ export interface Env {
   ANTHROPIC_VERSION: string;
   ALLOWED_ORIGINS: string;
   DEV_USER_ID: string;
+  // P2 auth
+  SESSION_SECRET: string; // Worker secret — signs session JWTs
+  ADMIN_TOKEN: string; // Worker secret — guards owner-only provisioning
+  ALLOW_DEV_AUTH: string; // "true" only in local dev (.dev.vars); never in prod
+  SESSION_SAMESITE: string; // "Lax" (same-site deploy) or "None" (cross-site)
+  TURNSTILE_SECRET?: string; // optional; when set, /login requires a Turnstile token
+}
+
+// Per-request context vars set by middleware.
+export interface Variables {
+  userId?: string;
 }
 
 // ---- The model contract (matches translation-system-prompt.md exactly) ----

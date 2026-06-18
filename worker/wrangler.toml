@@ -16,15 +16,24 @@ migrations_dir = "migrations"
 
 # ---------------------------------------------------------------------------
 # Non-secret, env-configurable vars. Model ids are overridable here.
-# The Anthropic API key is NOT here — it is a secret:
-#   wrangler secret put ANTHROPIC_API_KEY
+# Secrets (NOT here) — set with `wrangler secret put <NAME>`:
+#   ANTHROPIC_API_KEY   the model key (never client-side)
+#   SESSION_SECRET      signs P2 session JWTs (use a long random string)
+#   ADMIN_TOKEN         guards owner-only user provisioning (/admin/users)
+#   TURNSTILE_SECRET    optional; when set, /auth/login requires a Turnstile token
 # ---------------------------------------------------------------------------
 [vars]
 MODEL_TRANSLATE = "claude-haiku-4-5-20251001"
 MODEL_GRADE = "claude-sonnet-4-6"
 ANTHROPIC_VERSION = "2023-06-01"
 # Comma-separated list of origins allowed to call the Worker (your Pages URL).
-# "*" is fine for local dev; lock this down in production.
+# Credentialed CORS reflects a matching origin; set this to your Pages URL in prod.
 ALLOWED_ORIGINS = "*"
-# Fallback identity used only when Cloudflare Access is absent (local dev).
+# Fallback identity used only by the local-dev auth bypass below.
 DEV_USER_ID = "dev@local"
+# Session cookie SameSite: "Lax" when the Worker shares a site with the frontend
+# (recommended; see README), or "None" for a cross-site deploy.
+SESSION_SAMESITE = "Lax"
+# Local-dev auth bypass. MUST stay "false" in production; set "true" only in
+# worker/.dev.vars so `wrangler dev` works without logging in.
+ALLOW_DEV_AUTH = "false"

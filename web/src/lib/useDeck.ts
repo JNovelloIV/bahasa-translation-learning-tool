@@ -2,14 +2,15 @@ import { useCallback, useEffect, useState } from 'react';
 import { api, type WordsResponse } from './api';
 
 // The deck (GET /words) is the design's single source of truth: it drives the
-// Words screen, the Compose "N due" pill, and the Review tab badge. Load once at
-// the app root and refresh after translate/grade so all counts stay in sync.
-export function useDeck() {
+// Words screen, the Compose "N due" pill, and the Review tab badge. Gated on
+// `enabled` (auth) so we don't fetch before login.
+export function useDeck(enabled: boolean) {
   const [deck, setDeck] = useState<WordsResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
 
   const refresh = useCallback(async () => {
+    if (!enabled) return;
     try {
       setError('');
       setDeck(await api.words());
@@ -18,11 +19,11 @@ export function useDeck() {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [enabled]);
 
   useEffect(() => {
-    refresh();
-  }, [refresh]);
+    if (enabled) refresh();
+  }, [enabled, refresh]);
 
   const dueCount = deck?.due_count ?? 0;
   return { deck, dueCount, loading, error, refresh };

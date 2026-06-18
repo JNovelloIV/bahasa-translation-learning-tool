@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { api, LANG_NAME, type LangCode, type Profile, type TranslateResponse, type WordsResponse } from '../lib/api';
 import { speaker } from '../lib/audio';
-import { MoonIcon, SunIcon, CopyIcon, SpeakerIcon, ShareIcon, CheckIcon } from '../lib/icons';
+import { MoonIcon, SunIcon, CopyIcon, SpeakerIcon, ShareIcon, CheckIcon, GearIcon } from '../lib/icons';
 
 interface Props {
   deck: WordsResponse | null;
@@ -11,6 +11,7 @@ interface Props {
   refresh: () => Promise<void> | void;
   toast: (t: string) => void;
   profile: Profile;
+  onSettings: () => void;
   goReview: () => void;
 }
 
@@ -75,7 +76,7 @@ const QUICK_PHRASES = [
   'Tolong kirim laporannya hari ini',
 ];
 
-export function Compose({ dueCount, dark, toggleDark, refresh, toast, profile, goReview }: Props) {
+export function Compose({ dueCount, dark, toggleDark, refresh, toast, profile, onSettings, goReview }: Props) {
   const [input, setInput] = useState('');
   const [result, setResult] = useState<Result | null>(null);
   const [loading, setLoading] = useState(false);
@@ -183,6 +184,23 @@ export function Compose({ dueCount, dark, toggleDark, refresh, toast, profile, g
             }}
           >
             {dark ? <MoonIcon /> : <SunIcon />}
+          </button>
+          <button
+            onClick={onSettings}
+            aria-label="Settings"
+            style={{
+              width: 40,
+              height: 40,
+              borderRadius: '50%',
+              background: 'var(--surface-2)',
+              border: 'none',
+              cursor: 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+            }}
+          >
+            <GearIcon />
           </button>
         </div>
       </div>

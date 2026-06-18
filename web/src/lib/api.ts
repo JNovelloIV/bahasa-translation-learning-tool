@@ -6,15 +6,23 @@ const API_BASE = import.meta.env.VITE_API_BASE ?? '/api';
 export type LangCode = 'en' | 'id';
 export const LANG_NAME: Record<LangCode, string> = { en: 'English', id: 'Bahasa Indonesia' };
 
+export class ApiError extends Error {
+  status: number;
+  constructor(message: string, status: number) {
+    super(message);
+    this.status = status;
+  }
+}
+
 async function req<T>(path: string, init?: RequestInit): Promise<T> {
   const res = await fetch(`${API_BASE}${path}`, {
     ...init,
     headers: { 'Content-Type': 'application/json', ...(init?.headers ?? {}) },
-    credentials: 'include', // forward Cloudflare Access cookies
+    credentials: 'include', // send/receive the session cookie
   });
   const data = await res.json().catch(() => ({}));
   if (!res.ok) {
-    throw new Error((data as { error?: string }).error || `Request failed (${res.status})`);
+    throw new ApiError((data as { error?: string }).error || `Request failed (${res.status})`, res.status);
   }
   return data as T;
 }
@@ -131,6 +139,12 @@ export interface Profile {
 
 export const api = {
   me: () => req<Profile>('/me'),
+  login: (display_name: string, pin: string, turnstile_token?: string) =>
+    req<{ ok: boolean; profile: Profile }>('/auth/login', {
+      method: 'POST',
+      body: JSON.stringify({ display_name, pin, turnstile_token }),
+    }),
+  logout: () => req<{ ok: boolean }>('/auth/logout', { method: 'POST' }),
   translate: (text: string) =>
     req<TranslateResponse>('/translate', { method: 'POST', body: JSON.stringify({ text }) }),
   queue: () => req<QueueResponse>('/review/queue'),
