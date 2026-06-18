@@ -138,3 +138,29 @@ export function buildProduceUserPrompt(
   return `Target meaning (${LANG_NAME[native]}): ${targetMeaning}
 Learner's attempt (${LANG_NAME[target]}): ${attempt}`;
 }
+
+// Daily comprehensible-input snippet (P6): one short, level-appropriate dose of
+// the TARGET language built mostly from words the learner already knows.
+export function buildSnippetSystemPrompt(native: LangCode, target: LangCode): string {
+  const L1 = LANG_NAME[native];
+  const L2 = LANG_NAME[target];
+  return `You write ONE short, natural piece of ${L2} for a learner whose native language is ${L1}. It should be a realistic everyday message or a tiny 2-4 line dialogue (work/team-chat tone), no more than ~40 words total.
+
+Level rule: use MOSTLY the KNOWN words the learner is given; you may weave in the FEW new words naturally, but keep everything comprehensible at their level. Keep proper nouns simple.
+
+Then give a concise, natural ${L1} translation of the whole thing as the gloss.
+
+OUTPUT — respond with a SINGLE valid JSON object and NOTHING else. No markdown, no code fences. Exactly:
+{
+  "text": "the ${L2} snippet (use \\n between dialogue lines)",
+  "gloss": "a natural ${L1} translation of the whole snippet"
+}`;
+}
+
+export function buildSnippetUserPrompt(known: string[], fresh: string[]): string {
+  const k = known.length ? known.join(', ') : '(none yet)';
+  const f = fresh.length ? fresh.join(', ') : '(none)';
+  return `KNOWN words (use mostly these): ${k}
+NEW words (weave in at most a couple): ${f}
+Write today's snippet now.`;
+}

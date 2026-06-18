@@ -148,6 +148,14 @@ export interface UsageResponse {
   month: UsageTotals;
 }
 
+export interface SnippetResponse {
+  text?: string;
+  gloss?: string;
+  day: string;
+  cached?: boolean;
+  empty?: boolean;
+}
+
 export interface ActivitySummary {
   today: { active_seconds: number; reps: number };
   yesterday: { active_seconds: number; reps: number };
@@ -164,6 +172,7 @@ export const api = {
   activity: () => req<ActivitySummary>('/activity'),
   ping: (seconds: number) =>
     req<{ ok: boolean }>('/activity/ping', { method: 'POST', body: JSON.stringify({ seconds }) }),
+  dailySnippet: () => req<SnippetResponse>('/daily-snippet'),
   login: (display_name: string, pin: string, turnstile_token?: string) =>
     req<{ ok: boolean; profile: Profile }>('/auth/login', {
       method: 'POST',

@@ -3,6 +3,7 @@ import { api, LANG_NAME, type ActivitySummary, type LangCode, type Profile, type
 import { speaker } from '../lib/audio';
 import { MoonIcon, SunIcon, CopyIcon, SpeakerIcon, ShareIcon, CheckIcon, GearIcon } from '../lib/icons';
 import { ConsistencyCard } from '../components/ConsistencyCard';
+import { SnippetCard } from '../components/SnippetCard';
 
 interface Props {
   deck: WordsResponse | null;
@@ -213,6 +214,7 @@ export function Compose({ dueCount, dark, toggleDark, refresh, toast, profile, a
         style={{ flex: 1, minHeight: 0, overflowY: 'auto', padding: '6px 16px 10px', display: 'flex', flexDirection: 'column', gap: 13 }}
       >
         {!result && <ConsistencyCard activity={activity} />}
+        {!result && <SnippetCard profile={profile} />}
 
         {error && (
           <div

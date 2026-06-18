@@ -61,6 +61,20 @@ export function validateTranslation(parsed: unknown): TranslationResult {
   };
 }
 
+export interface SnippetResult {
+  text: string;
+  gloss: string;
+}
+
+export function validateSnippet(parsed: unknown): SnippetResult {
+  if (typeof parsed !== 'object' || parsed === null) throw new Error('snippet: not an object');
+  const o = parsed as Record<string, unknown>;
+  const text = asString(o.text).trim();
+  const gloss = asString(o.gloss).trim();
+  if (!text) throw new Error('snippet: missing text');
+  return { text, gloss };
+}
+
 export function validateProduce(parsed: unknown): ProduceResult {
   if (typeof parsed !== 'object' || parsed === null) {
     throw new Error('produce: not an object');
