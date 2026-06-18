@@ -11,7 +11,7 @@ compatibility_flags = ["nodejs_compat"]
 [[d1_databases]]
 binding = "DB"
 database_name = "sehari-db"
-database_id = "REPLACE_WITH_YOUR_D1_DATABASE_ID"
+database_id = "535e8d89-0d1c-4abf-a2f6-135ab2f3d1ec"
 migrations_dir = "migrations"
 
 # ---------------------------------------------------------------------------
