@@ -9,10 +9,11 @@ compatibility_flags = ["nodejs_compat"]
 [assets]
 directory = "../web/dist"
 
-# Build the frontend before deploying. wrangler runs this from the worker/ dir,
-# so we step up to the repo root and build the web workspace into web/dist.
+# Build the frontend before deploying. In Cloudflare's build environment the
+# deploy command runs from the repo root, so build the web workspace directly
+# (no directory change) into web/dist, which [assets] above points to.
 [build]
-command = "cd .. && npm install && npm run build:web"
+command = "npm install && npm run build:web"
 
 # ---------------------------------------------------------------------------
 # D1 binding. Create the database yourself (see README) and paste the id here:
