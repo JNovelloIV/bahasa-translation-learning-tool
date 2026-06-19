@@ -41,11 +41,7 @@ app.post('/', async (c) => {
     );
   } catch (err) {
     console.error('translate model error:', err);
-    // TEMP (debug): surface the real cause to the client; revert after diagnosing.
-    return c.json(
-      { error: 'Translation failed. Please try again.', detail: err instanceof Error ? err.message : String(err) },
-      502,
-    );
+    return c.json({ error: 'Translation failed. Please try again.' }, 502);
   }
 
   // Harvest is best-effort: never fail the translation if storage hiccups.
