@@ -1,7 +1,9 @@
 // API client. Talks ONLY to our Worker — it NEVER holds the Anthropic key.
 // Base URL: dev uses the Vite /api proxy; prod uses VITE_API_BASE (Worker URL).
 
-const API_BASE = import.meta.env.VITE_API_BASE ?? '/api';
+// Same-origin in production (the Worker serves this app and the API together),
+// so calls go straight to "/translate" etc. In dev, use the Vite "/api" proxy.
+const API_BASE = import.meta.env.VITE_API_BASE ?? (import.meta.env.DEV ? '/api' : '');
 
 export type LangCode = 'en' | 'id';
 export const LANG_NAME: Record<LangCode, string> = { en: 'English', id: 'Bahasa Indonesia' };

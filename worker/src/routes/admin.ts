@@ -56,4 +56,62 @@ app.post('/users', async (c) => {
   return c.json({ ok: true, id, display_name: displayName });
 });
 
+// GET /admin/setup — a tiny self-contained form to provision users without the
+// command line. The form is public HTML, but creating a user still requires the
+// ADMIN_TOKEN (entered in the form), so this is safe to leave deployed.
+app.get('/setup', (c) => {
+  return c.html(`<!doctype html>
+<html lang="en"><head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Sehari · Create user</title>
+<style>
+  body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;background:#f4efe3;color:#241e16;margin:0;padding:32px 18px;}
+  .card{max-width:420px;margin:0 auto;background:#fffdf7;border:1px solid #e6dfce;border-radius:18px;padding:22px;}
+  h1{font-size:22px;margin:0 0 4px;} p.sub{color:#8b8474;font-size:13px;margin:0 0 18px;}
+  label{display:block;font-size:13px;font-weight:600;margin:14px 0 5px;}
+  input,select{width:100%;box-sizing:border-box;padding:11px 12px;font-size:16px;border:1px solid #e6dfce;border-radius:11px;background:#ece5d6;color:#241e16;}
+  button{width:100%;margin-top:20px;padding:13px;font-size:15px;font-weight:600;color:#fff;background:#bd5a2e;border:none;border-radius:13px;cursor:pointer;}
+  #out{margin-top:16px;font-size:14px;white-space:pre-wrap;}
+  .ok{color:#5f7a52;} .err{color:#bd5a2e;}
+</style></head>
+<body><div class="card">
+  <h1>Create a Sehari user</h1>
+  <p class="sub">Owner-only. You'll need your Admin token.</p>
+  <label>Name (used to sign in)</label>
+  <input id="name" autocomplete="off" placeholder="e.g. Joe">
+  <label>PIN (6+ digits)</label>
+  <input id="pin" inputmode="numeric" autocomplete="off" placeholder="••••••">
+  <label>Native language (the one they already know)</label>
+  <select id="native"><option value="en">English</option><option value="id">Bahasa Indonesia</option></select>
+  <label>Target language (the one they're learning)</label>
+  <select id="target"><option value="id">Bahasa Indonesia</option><option value="en">English</option></select>
+  <label>Admin token</label>
+  <input id="token" type="password" autocomplete="off" placeholder="paste your ADMIN_TOKEN">
+  <button id="go">Create user</button>
+  <div id="out"></div>
+</div>
+<script>
+  const out = document.getElementById('out');
+  document.getElementById('go').onclick = async () => {
+    out.textContent = 'Creating…'; out.className = '';
+    try {
+      const r = await fetch('/admin/users', {
+        method:'POST',
+        headers:{'content-type':'application/json','authorization':'Bearer '+document.getElementById('token').value.trim()},
+        body: JSON.stringify({
+          display_name: document.getElementById('name').value.trim(),
+          pin: document.getElementById('pin').value.trim(),
+          native_lang: document.getElementById('native').value,
+          target_lang: document.getElementById('target').value,
+        })
+      });
+      const d = await r.json();
+      if (r.ok) { out.textContent = '✓ Created "'+d.display_name+'". You can now sign in at the app.'; out.className='ok'; }
+      else { out.textContent = '✗ '+(d.error||('Error '+r.status)); out.className='err'; }
+    } catch(e){ out.textContent = '✗ '+e; out.className='err'; }
+  };
+</script>
+</body></html>`);
+});
+
 export default app;

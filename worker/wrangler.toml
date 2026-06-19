@@ -3,6 +3,17 @@ main = "src/index.ts"
 compatibility_date = "2024-12-18"
 compatibility_flags = ["nodejs_compat"]
 
+# Serve the built React frontend from this same Worker (single origin → no CORS,
+# first-party session cookie that works on iOS Safari). Static files are served
+# first; any non-asset path falls through to the Hono API below.
+[assets]
+directory = "../web/dist"
+
+# Build the frontend before deploying. wrangler runs this from the worker/ dir,
+# so we step up to the repo root and build the web workspace into web/dist.
+[build]
+command = "cd .. && npm install && npm run build:web"
+
 # ---------------------------------------------------------------------------
 # D1 binding. Create the database yourself (see README) and paste the id here:
 #   wrangler d1 create sehari-db
