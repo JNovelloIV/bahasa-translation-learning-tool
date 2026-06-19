@@ -1,0 +1,17 @@
+{
+  "name": "sehari",
+  "private": true,
+  "version": "0.1.0",
+  "description": "Sehari — dual-purpose Bahasa Indonesia translator + spaced-repetition learning tool",
+  "workspaces": [
+    "worker",
+    "web"
+  ],
+  "scripts": {
+    "dev:worker": "npm run dev --workspace worker",
+    "dev:web": "npm run dev --workspace web",
+    "build:web": "npm run build --workspace web",
+    "migrate:local": "npm run migrate:local --workspace worker",
+    "migrate:remote": "npm run migrate:remote --workspace worker"
+  }
+}

@@ -1,0 +1,147 @@
+/* Sehari — recreated from the Claude Design handoff (high-fidelity).
+   Language coding is the product's signature: Bahasa = Newsreader (serif),
+   English = Hanken Grotesk (sans). Tokens swap on the .dark class. */
+
+body {
+  margin: 0;
+}
+* {
+  box-sizing: border-box;
+}
+
+.noscroll {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+.noscroll::-webkit-scrollbar {
+  display: none;
+}
+
+.id {
+  font-family: 'Newsreader', Georgia, serif;
+}
+.en {
+  font-family: 'Hanken Grotesk', ui-sans-serif, system-ui, sans-serif;
+}
+
+.sehari {
+  --bg: #f4efe3;
+  --surface: #fffdf7;
+  --surface-2: #ece5d6;
+  --ink: #241e16;
+  --muted: #8b8474;
+  --faint: #b3aa98;
+  --line: #e6dfce;
+  --accent: #bd5a2e;
+  --accent-soft: #f4ddcd;
+  --good: #5f7a52;
+  --good-soft: #dde7cb;
+}
+.sehari.dark {
+  --bg: #15120d;
+  --surface: #211d15;
+  --surface-2: #2c2619;
+  --ink: #f0ebdf;
+  --muted: #9c937f;
+  --faint: #6e6757;
+  --line: #332c1f;
+  --accent: #e08049;
+  --accent-soft: #3b2a1c;
+  --good: #9bb084;
+  --good-soft: #2a311d;
+}
+
+/* Make the warm paper fill the whole viewport behind the app frame. */
+html,
+body,
+#root {
+  height: 100%;
+}
+body {
+  font-family: 'Hanken Grotesk', ui-sans-serif, system-ui, sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+
+.ic {
+  fill: none;
+  stroke: var(--faint);
+  stroke-width: 1.7;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+.tab.active .ic {
+  stroke: var(--accent);
+}
+.tab .lbl {
+  color: var(--faint);
+}
+.tab.active .lbl {
+  color: var(--accent);
+}
+
+.seg {
+  background: var(--line);
+}
+.seg.on {
+  background: var(--accent);
+}
+
+.chip {
+  background: var(--surface-2);
+  color: var(--muted);
+}
+.chip.active {
+  background: var(--ink);
+  color: var(--bg);
+}
+
+::placeholder {
+  color: var(--faint);
+}
+
+button {
+  font-family: inherit;
+}
+input,
+textarea {
+  font-family: inherit;
+}
+
+@keyframes depo {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+@keyframes sheetUp {
+  from {
+    transform: translateY(100%);
+  }
+  to {
+    transform: none;
+  }
+}
+@keyframes toastUp {
+  from {
+    opacity: 0;
+    transform: translate(-50%, 10px);
+  }
+  to {
+    opacity: 1;
+    transform: translate(-50%, 0);
+  }
+}
+@keyframes rev {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}

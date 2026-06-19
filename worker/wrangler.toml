@@ -1,0 +1,39 @@
+name = "sehari-worker"
+main = "src/index.ts"
+compatibility_date = "2024-12-18"
+compatibility_flags = ["nodejs_compat"]
+
+# ---------------------------------------------------------------------------
+# D1 binding. Create the database yourself (see README) and paste the id here:
+#   wrangler d1 create sehari-db
+# Then copy the printed database_id into the value below.
+# ---------------------------------------------------------------------------
+[[d1_databases]]
+binding = "DB"
+database_name = "sehari-db"
+database_id = "535e8d89-0d1c-4abf-a2f6-135ab2f3d1ec"
+migrations_dir = "migrations"
+
+# ---------------------------------------------------------------------------
+# Non-secret, env-configurable vars. Model ids are overridable here.
+# Secrets (NOT here) — set with `wrangler secret put <NAME>`:
+#   ANTHROPIC_API_KEY   the model key (never client-side)
+#   SESSION_SECRET      signs P2 session JWTs (use a long random string)
+#   ADMIN_TOKEN         guards owner-only user provisioning (/admin/users)
+#   TURNSTILE_SECRET    optional; when set, /auth/login requires a Turnstile token
+# ---------------------------------------------------------------------------
+[vars]
+MODEL_TRANSLATE = "claude-haiku-4-5-20251001"
+MODEL_GRADE = "claude-sonnet-4-6"
+ANTHROPIC_VERSION = "2023-06-01"
+# Comma-separated list of origins allowed to call the Worker (your Pages URL).
+# Credentialed CORS reflects a matching origin; set this to your Pages URL in prod.
+ALLOWED_ORIGINS = "*"
+# Fallback identity used only by the local-dev auth bypass below.
+DEV_USER_ID = "dev@local"
+# Session cookie SameSite: "Lax" when the Worker shares a site with the frontend
+# (recommended; see README), or "None" for a cross-site deploy.
+SESSION_SAMESITE = "Lax"
+# Local-dev auth bypass. MUST stay "false" in production; set "true" only in
+# worker/.dev.vars so `wrangler dev` works without logging in.
+ALLOW_DEV_AUTH = "false"
