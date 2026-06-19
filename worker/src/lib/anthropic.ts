@@ -27,47 +27,75 @@ export interface TokenUsage {
   output_tokens: number;
 }
 
-/** Raw single call to the Anthropic Messages API. Returns text + token usage. */
-async function rawCall(env: Env, opts: CallOptions): Promise<{ text: string; usage: TokenUsage }> {
-  const res = await fetch(ANTHROPIC_URL, {
-    method: 'POST',
-    headers: {
-      'content-type': 'application/json',
-      'x-api-key': env.ANTHROPIC_API_KEY,
-      'anthropic-version': env.ANTHROPIC_VERSION || '2023-06-01',
-    },
-    body: JSON.stringify({
-      model: opts.model,
-      max_tokens: opts.maxTokens ?? 1500,
-      temperature: opts.temperature ?? 0,
-      system: opts.system,
-      messages: opts.messages,
-    }),
-  });
+// Transient HTTP statuses worth retrying: rate limit (429), overloaded (529),
+// and gateway/server hiccups (500/502/503/504).
+const RETRYABLE_STATUS = new Set([408, 425, 429, 500, 502, 503, 504, 529]);
+const MAX_HTTP_ATTEMPTS = 4;
+const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
-  if (!res.ok) {
-    const detail = await res.text().catch(() => '');
-    throw new Error(`Anthropic API ${res.status}: ${detail.slice(0, 500)}`);
+/**
+ * Raw call to the Anthropic Messages API with retry + exponential backoff on
+ * transient failures (rate limit / overload / network). Returns text + usage.
+ */
+async function rawCall(env: Env, opts: CallOptions): Promise<{ text: string; usage: TokenUsage }> {
+  let lastErr: unknown;
+
+  for (let attempt = 0; attempt < MAX_HTTP_ATTEMPTS; attempt++) {
+    if (attempt > 0) await sleep(500 * 2 ** (attempt - 1)); // 500ms, 1s, 2s
+
+    let res: Response;
+    try {
+      res = await fetch(ANTHROPIC_URL, {
+        method: 'POST',
+        headers: {
+          'content-type': 'application/json',
+          'x-api-key': env.ANTHROPIC_API_KEY,
+          'anthropic-version': env.ANTHROPIC_VERSION || '2023-06-01',
+        },
+        body: JSON.stringify({
+          model: opts.model,
+          max_tokens: opts.maxTokens ?? 1500,
+          temperature: opts.temperature ?? 0,
+          system: opts.system,
+          messages: opts.messages,
+        }),
+      });
+    } catch (err) {
+      lastErr = err; // network error — retry
+      continue;
+    }
+
+    if (!res.ok) {
+      const detail = await res.text().catch(() => '');
+      const err = new Error(`Anthropic API ${res.status}: ${detail.slice(0, 300)}`);
+      if (RETRYABLE_STATUS.has(res.status) && attempt < MAX_HTTP_ATTEMPTS - 1) {
+        lastErr = err; // transient — back off and retry
+        continue;
+      }
+      throw err; // non-retryable (e.g. 400/401/404) or out of attempts
+    }
+
+    const data = (await res.json()) as {
+      content?: Array<{ type: string; text?: string }>;
+      usage?: { input_tokens?: number; output_tokens?: number };
+    };
+    const text = (data.content ?? [])
+      .filter((b) => b.type === 'text')
+      .map((b) => b.text ?? '')
+      .join('')
+      .trim();
+
+    if (!text) throw new Error('Anthropic API returned empty content');
+    return {
+      text,
+      usage: {
+        input_tokens: data.usage?.input_tokens ?? 0,
+        output_tokens: data.usage?.output_tokens ?? 0,
+      },
+    };
   }
 
-  const data = (await res.json()) as {
-    content?: Array<{ type: string; text?: string }>;
-    usage?: { input_tokens?: number; output_tokens?: number };
-  };
-  const text = (data.content ?? [])
-    .filter((b) => b.type === 'text')
-    .map((b) => b.text ?? '')
-    .join('')
-    .trim();
-
-  if (!text) throw new Error('Anthropic API returned empty content');
-  return {
-    text,
-    usage: {
-      input_tokens: data.usage?.input_tokens ?? 0,
-      output_tokens: data.usage?.output_tokens ?? 0,
-    },
-  };
+  throw lastErr instanceof Error ? lastErr : new Error('Anthropic API: retries exhausted');
 }
 
 /** Remove ```json … ``` fences and any stray prose around a JSON object. */
