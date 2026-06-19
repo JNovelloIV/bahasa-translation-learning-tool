@@ -9,11 +9,6 @@ compatibility_flags = ["nodejs_compat"]
 [assets]
 directory = "../web/dist"
 
-# Build the frontend before deploying. In Cloudflare's build environment the
-# deploy command runs from the repo root, so build the web workspace directly
-# (no directory change) into web/dist, which [assets] above points to.
-[build]
-command = "npm install && npm run build:web"
 
 # ---------------------------------------------------------------------------
 # D1 binding. Create the database yourself (see README) and paste the id here:
